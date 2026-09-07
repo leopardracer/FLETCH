@@ -3,8 +3,9 @@
 </p>
 
 <p align="center">
-  <img alt="tests" src="https://img.shields.io/badge/tests-38%20passing-D9670C?style=flat-square&labelColor=14100C">
-  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A520-F2E9DD?style=flat-square&labelColor=14100C">
+  <img alt="tests" src="https://img.shields.io/badge/tests-96%20passing-D9670C?style=flat-square&labelColor=14100C">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-74.3%25-D9670C?style=flat-square&labelColor=14100C">
+  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F2E9DD?style=flat-square&labelColor=14100C">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F2E9DD?style=flat-square&labelColor=14100C">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F2E9DD?style=flat-square&labelColor=14100C">
   <img alt="fabricated data" src="https://img.shields.io/badge/fabricated%20data-0-D9670C?style=flat-square&labelColor=14100C">
@@ -144,15 +145,50 @@ FLETCH reads Robinhood Chain directly — no seed data, no fixtures shipped in t
 
 Every `DEMO`-labeled block above is illustrative shape, not real output — this repo doesn't ship a screenshot gallery built from fabricated tokens. To see real output: run [Quick Start](#quick-start) against a live `RPC_URL`, or generate real dashboard screenshots yourself with `npm run screenshot` (needs Playwright — see `scripts/screenshot.mjs` for why that's a separate install rather than a project dependency).
 
-## Development
+## Tests
 
-Setup, environment variables, test suite, and the current next-steps list: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+<p align="center">
+  <img src="./assets/tests-terminal.png" alt="FLETCH test suite — 96 passing, 74.30% line coverage, clean build" width="100%">
+</p>
+
+FLETCH's test suite covers the parts of the product where correctness actually matters: every FLETCH Score formula, every risk-finding threshold, every signal type the signal engine can emit, the persistence layer that backs all of it, and the API surface end-to-end over real HTTP. All of it runs deterministically — no live RPC calls, no real database file, no wall-clock timing — using Node's built-in test runner and `node:sqlite`'s in-memory mode, so a run is exact and reproducible every time.
 
 ```sh
 npm test
 ```
 
-38 tests, all against pure scoring/risk/signal-engine/explanation logic — no network required. `npm run build` type-checks and compiles; `npm run dev` does both and starts the server.
+```
+tests 96
+pass 96
+fail 0
+```
+
+```sh
+npm run test:coverage
+```
+
+```
+all files   |  74.30 |    74.35 |   64.44 |
+```
+
+74.30% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer — sits at 90–100%. The lower spots are `chain/*.ts` and `data/providers/rpcProvider.ts`, which genuinely need a live RPC connection to exercise meaningfully; per this project's own rule against fabricating chain data, those aren't mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+
+```sh
+npm run test:integration   # the two test files that exercise multiple layers together —
+                            # chain metrics → risk → score → signals → persistence, and a
+                            # real Express app over real HTTP
+npm run test:watch         # re-runs on every change to the compiled output
+```
+
+## Development
+
+Setup, environment variables, and the current next-steps list: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+
+```sh
+npm run dev
+```
+
+Type-checks, builds, and starts the API + dashboard. `npm run build` does the first two only.
 
 ## Roadmap
 

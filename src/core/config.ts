@@ -1,6 +1,21 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/**
+ * z.coerce.boolean() uses JS's Boolean(value) coercion, which makes the
+ * *string* "false" coerce to `true` (any non-empty string is truthy) —
+ * a real footgun for an env-var boolean, since env vars are always
+ * strings. This treats "false"/"0"/"no"/"off" (case-insensitive) as
+ * false and everything else as true, matching normal env-var convention.
+ * Caught by src/core/config.test.ts.
+ */
+const zBooleanEnv = (defaultValue: boolean) =>
+  z
+    .string()
+    .optional()
+    .default(String(defaultValue))
+    .transform((v) => !["false", "0", "no", "off", ""].includes(v.trim().toLowerCase()));
+
 const envSchema = z.object({
   CHAIN_ID: z.coerce.number().default(4663),
   RPC_URL: z.string().optional().default(""),
@@ -11,7 +26,7 @@ const envSchema = z.object({
   WHALE_THRESHOLD_TOKENS: z.coerce.number().default(1_000_000),
   PORT: z.coerce.number().default(8787),
   DB_PATH: z.string().optional().default("./fletch.db"),
-  ENABLE_POLLER: z.coerce.boolean().default(true),
+  ENABLE_POLLER: zBooleanEnv(true),
   POLL_INTERVAL_MS: z.coerce.number().default(300_000), // 5 min — see docs/ARCHITECTURE.md on why this isn't more aggressive against a shared public RPC
   POLL_TOKEN_LIMIT: z.coerce.number().default(15),
   SNAPSHOT_MIN_INTERVAL_SECONDS: z.coerce.number().default(60), // don't record near-duplicate snapshots from rapid page views

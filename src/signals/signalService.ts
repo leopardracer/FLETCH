@@ -34,15 +34,21 @@ export function analyzeAndPersist(
   launch: DetectedLaunch | null,
   metrics: TokenMetrics,
   smartMoney: SmartMoneyReport,
-  social: SocialReport
+  social: SocialReport,
+  now: number = Math.floor(Date.now() / 1000)
 ): Analysis {
-  const previousSnapshot = getPreviousSnapshot(token, COMPARISON_WINDOW_SECONDS);
+  const previousSnapshot = getPreviousSnapshot(token, COMPARISON_WINDOW_SECONDS, now);
   const risk = analyzeRisk(launch, metrics, previousSnapshot);
   const score = computeFletchScore(metrics, risk, smartMoney, social, previousSnapshot, launch?.curve);
-  const signals = detectSignals({ metrics, risk, curveAddress: launch?.curve, previousSnapshot });
+  const signals = detectSignals({ metrics, risk, curveAddress: launch?.curve, previousSnapshot, now });
 
-  recordSnapshot(token, metrics, score);
-  for (const s of signals) recordSignal(token, s);
+  // Signals are only persisted alongside a genuinely new snapshot — otherwise a
+  // rapid repeat read (same rate-limit window) would re-file identical signal
+  // rows every time, even though nothing new was actually observed.
+  const wroteNewSnapshot = recordSnapshot(token, metrics, score, now);
+  if (wroteNewSnapshot) {
+    for (const s of signals) recordSignal(token, s);
+  }
 
   return { risk, score, signals };
 }

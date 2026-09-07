@@ -27,15 +27,25 @@ export interface TokenSnapshot {
  * acceleration signals exist at all (see signals/signalEngine.ts). Rate-
  * limited by SNAPSHOT_MIN_INTERVAL_SECONDS so rapid repeat page views
  * don't spam near-duplicate rows.
+ *
+ * Returns whether a row was actually inserted — signalService.ts uses
+ * this to skip re-persisting the same signals on a read that didn't
+ * produce a new snapshot, which would otherwise duplicate identical
+ * signal rows on every rapid repeat read (caught by
+ * signals/signalService.test.ts).
  */
-export function recordSnapshot(token: `0x${string}`, metrics: TokenMetrics, score: FletchScore): void {
+export function recordSnapshot(
+  token: `0x${string}`,
+  metrics: TokenMetrics,
+  score: FletchScore,
+  now: number = Math.floor(Date.now() / 1000)
+): boolean {
   const db = getDb();
-  const now = Math.floor(Date.now() / 1000);
 
   const last = db
     .prepare(`SELECT taken_at FROM token_snapshots WHERE token = ? ORDER BY taken_at DESC LIMIT 1`)
     .get(token.toLowerCase()) as { taken_at: number } | undefined;
-  if (last && now - last.taken_at < config.snapshotMinIntervalSeconds) return;
+  if (last && now - last.taken_at < config.snapshotMinIntervalSeconds) return false;
 
   db.prepare(
     `INSERT INTO token_snapshots
@@ -60,12 +70,17 @@ export function recordSnapshot(token: `0x${string}`, metrics: TokenMetrics, scor
     score.components.whaleActivity.value,
     score.components.safety.value
   );
+  return true;
 }
 
 /** Most recent snapshot strictly older than `olderThanSeconds` ago — the comparison point for trend signals. */
-export function getPreviousSnapshot(token: `0x${string}`, olderThanSeconds: number): TokenSnapshot | null {
+export function getPreviousSnapshot(
+  token: `0x${string}`,
+  olderThanSeconds: number,
+  now: number = Math.floor(Date.now() / 1000)
+): TokenSnapshot | null {
   const db = getDb();
-  const cutoff = Math.floor(Date.now() / 1000) - olderThanSeconds;
+  const cutoff = now - olderThanSeconds;
   const row = db
     .prepare(
       `SELECT * FROM token_snapshots WHERE token = ? AND taken_at <= ? ORDER BY taken_at DESC LIMIT 1`

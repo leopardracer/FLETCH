@@ -10,7 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        # node:sqlite (src/persistence/db.ts) requires Node >=22.5 and simply
+        # doesn't exist on Node 20 — this matrix used to include 20.x, which
+        # would fail with ERR_UNKNOWN_BUILTIN_MODULE the moment any
+        # persistence-dependent test ran. See package.json "engines".
+        node-version: [22.x, 24.x]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,3 +24,5 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:coverage

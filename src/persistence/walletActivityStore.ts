@@ -4,13 +4,14 @@ export function recordWalletActivity(
   wallet: `0x${string}`,
   token: `0x${string}`,
   netChange: number,
-  priceInPair: number | null
+  priceInPair: number | null,
+  now: number = Math.floor(Date.now() / 1000)
 ): void {
   const db = getDb();
   db.prepare(`INSERT INTO wallet_activity (wallet, token, taken_at, net_change, price_in_pair) VALUES (?, ?, ?, ?, ?)`).run(
     wallet.toLowerCase(),
     token.toLowerCase(),
-    Math.floor(Date.now() / 1000),
+    now,
     netChange,
     priceInPair
   );

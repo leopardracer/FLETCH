@@ -124,6 +124,32 @@ test("liquidity change signal requires at least a 10% move to avoid noise", () =
   assert.ok(realMove.find((s) => s.type === "LIQUIDITY_INCREASE"));
 });
 
+test("price movement requires at least a 5% move, and severity scales with the size of the move", () => {
+  const prev = snapshot({ priceInPair: 1.0, takenAt: NOW - 600 });
+
+  const tinyMove = detectSignals({ metrics: metrics({ priceInPair: 1.02 }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW }); // +2%
+  assert.equal(tinyMove.some((s) => s.type === "PRICE_UP" || s.type === "PRICE_DOWN"), false);
+
+  const moderateUp = detectSignals({ metrics: metrics({ priceInPair: 1.10 }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW }); // +10%
+  const up = moderateUp.find((s) => s.type === "PRICE_UP");
+  assert.ok(up);
+  assert.equal(up!.severity, "MEDIUM");
+  assert.match(up!.evidence, /price \+10\.0% over 10m/);
+
+  const bigDrop = detectSignals({ metrics: metrics({ priceInPair: 0.75 }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW }); // -25%
+  const down = bigDrop.find((s) => s.type === "PRICE_DOWN");
+  assert.ok(down);
+  assert.equal(down!.severity, "HIGH"); // |pct| >= 20%
+  assert.match(down!.evidence, /price -25\.0% over 10m/);
+  assert.equal(bigDrop.some((s) => s.type === "PRICE_UP"), false, "a price drop must never also register as PRICE_UP");
+});
+
+test("price movement never fires when the previous price was zero — avoids a division by zero producing a fake percentage", () => {
+  const prev = snapshot({ priceInPair: 0, takenAt: NOW - 600 });
+  const signals = detectSignals({ metrics: metrics({ priceInPair: 5 }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW });
+  assert.equal(signals.some((s) => s.type === "PRICE_UP" || s.type === "PRICE_DOWN"), false);
+});
+
 test("activity acceleration reports a real trades-per-minute rate derived from the two snapshots", () => {
   const prev = snapshot({ buyCountWindow: 10, sellCountWindow: 5, takenAt: NOW - 600 }); // 10 min earlier
   const signals = detectSignals({
