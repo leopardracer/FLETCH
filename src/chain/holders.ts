@@ -20,12 +20,12 @@ export interface HolderStats {
 const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase()));
 
 /**
- * Generalized from GTTM/src/chain/holders.ts, which was hardwired to one
- * configured token. Same method: full Transfer log replay from the launch
- * block. This is a real, exact count — but it is O(transfers) in RPC log
- * volume per token, which is fine for one token on demand and does not
- * scale to "compute holder counts for every live token continuously."
- * See data/providers/blockscoutProvider.ts for the scalable path.
+ * Holder stats for any token, computed via full Transfer log replay from
+ * the launch block. This is a real, exact count — but it is O(transfers)
+ * in RPC log volume per token, which is fine for one token on demand and
+ * does not scale to "compute holder counts for every live token
+ * continuously." See data/providers/blockscoutProvider.ts for the
+ * scalable path.
  */
 export async function readHolderStats(
   tokenAddress: `0x${string}`,

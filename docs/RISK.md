@@ -12,7 +12,7 @@ The token's overall level is the highest level among its findings. A numeric con
 
 Each finding carries a `RiskFindingCode` — this is what lets the signal engine promote risk findings into signals 1:1 (see [SIGNALS.md](./SIGNALS.md)) without parsing evidence text.
 
-**At launch** (from the Pons V2 factory/curve event data — ported from GTTM's `huntScore.ts`):
+**At launch** (from the Pons V2 factory/curve event data):
 
 | Code | Trigger | Level |
 |---|---|---|

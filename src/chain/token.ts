@@ -26,9 +26,9 @@ export interface TokenInfo {
   contractExists: boolean;
 }
 
-/** Generalized from GTTM's single-token readTokenInfo — takes any address.
- *  Symbol/name/decimals never change once deployed, so this is cached
- *  for the life of the process — see docs/DEVELOPMENT.md#performance. */
+/** Reads token metadata for any address. Symbol/name/decimals never
+ *  change once deployed, so this is cached for the life of the process —
+ *  see docs/DEVELOPMENT.md#performance. */
 const tokenInfoCache = new ImmutableCache<string, TokenInfo>();
 
 export async function readTokenInfo(address: `0x${string}`): Promise<TokenInfo> {

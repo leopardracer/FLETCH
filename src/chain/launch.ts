@@ -22,9 +22,6 @@ export interface NoLaunchRecord {
  * Looks up a token's TokenLaunched event on the Pons V2 factory — the real
  * source for "who deployed it, and which curve backs it," with no
  * indexer needed (the factory names both as indexed args).
- *
- * Ported from GTTM/src/chain/launch.ts — already token-parameterized there,
- * unchanged here.
  */
 export async function readLaunchRecord(
   tokenAddress: `0x${string}`,

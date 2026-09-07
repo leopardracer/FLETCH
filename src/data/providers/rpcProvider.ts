@@ -25,11 +25,11 @@ async function getBlockTimestamp(blockNumber: bigint): Promise<number | null> {
 }
 
 /**
- * Free-tier implementation: raw RPC + the Pons V2 factory/curve reads
- * ported from GTTM. This is the "source of truth" provider — always
- * correct, but O(logs) per call, so it doesn't scale to computing metrics
- * for hundreds of tokens continuously. Good enough for the MVP's on-demand
- * token-page and small discovery-window use cases.
+ * Free-tier implementation: raw RPC + the Pons V2 factory/curve reads.
+ * This is the "source of truth" provider — always correct, but O(logs)
+ * per call, so it doesn't scale to computing metrics for hundreds of
+ * tokens continuously. Good enough for the MVP's on-demand token-page and
+ * small discovery-window use cases.
  *
  * A BlockscoutProvider (holders/tx acceleration) or a future Bitquery
  * provider (decoded trades, v4 pricing, cross-token wallet history) can

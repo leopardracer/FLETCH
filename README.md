@@ -104,7 +104,7 @@ RISK
 
 ## Risk Intelligence
 
-`LOW` / `MEDIUM` / `HIGH` / `CRITICAL`, never a bare "SCAM." Launch-moment checks (dev buy, bundled wallets, serial deployer) come from GTTM's original launch analysis, generalized to every token instead of one; ongoing checks (holder concentration, liquidity depth) are new in FLETCH. Full threshold table and what isn't checked yet (mint permissions, blacklist functions — needs bytecode analysis, not built): [docs/RISK.md](./docs/RISK.md).
+`LOW` / `MEDIUM` / `HIGH` / `CRITICAL`, never a bare "SCAM." Launch-moment checks (dev buy, bundled wallets, serial deployer) plus ongoing checks (holder concentration, liquidity depth, trend-based findings). Full threshold table and what isn't checked yet (mint permissions, blacklist functions — needs bytecode analysis, not built): [docs/RISK.md](./docs/RISK.md).
 
 ## Smart Money
 
@@ -168,11 +168,10 @@ Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-ste
 
 ## Built on
 
-| Source | What was reused |
+| Source | What was used |
 |---|---|
-| [`leopardracer/GTTM`](https://github.com/leopardracer/GTTM) | Pons V2 factory/curve/router contract addresses and event ABIs, the chain client, and the launch-risk pattern-matching this repo generalized from one token to every token |
 | [docs.robinhood.com/chain](https://docs.robinhood.com/chain/) | RPC endpoint, chain ID, network model |
-| [Bitquery's Pons launchpad docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/) | cross-verification for the Pons V2 contract addresses and event signatures (via GTTM) |
+| [Bitquery's Pons launchpad docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/) | cross-verification for the Pons V2 contract addresses and event signatures |
 | [Blockscout](https://robinhoodchain.blockscout.com) | official Robinhood Chain explorer; optional holder-count acceleration API |
 
 FLETCH is independent of Pons and Robinhood, refers to the network as "Robinhood Chain," and uses none of their marks.

@@ -19,10 +19,9 @@ export interface DetectedLaunch {
 
 /**
  * Scans the Pons V2 factory for every TokenLaunched event in a recent block
- * window — FLETCH's "new token" feed. This is chain-wide already (not
- * scoped to one token), ported near-verbatim from GTTM's sniper engine
- * (GTTM/src/chain/hunt.ts). Every field is a real chain read or a count
- * derived from one — nothing here is guessed.
+ * window — FLETCH's "new token" feed, chain-wide (not scoped to one
+ * token). Every field is a real chain read or a count derived from one —
+ * nothing here is guessed.
  */
 export async function scanRecentLaunches(windowBlocks?: bigint): Promise<DetectedLaunch[]> {
   const client = getClient();

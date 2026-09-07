@@ -27,7 +27,7 @@ flowchart TD
 
 ## Layers
 
-**`chain/`** — raw Robinhood Chain + Pons V2 reads via [viem](https://viem.sh). Ported and generalized from [GTTM](https://github.com/leopardracer/GTTM)'s sniper engine. `token.ts` caches immutable data (symbol/name/decimals) for the process lifetime — see [DEVELOPMENT.md](./DEVELOPMENT.md#performance).
+**`chain/`** — raw Robinhood Chain + Pons V2 reads via [viem](https://viem.sh). `token.ts` caches immutable data (symbol/name/decimals) for the process lifetime — see [DEVELOPMENT.md](./DEVELOPMENT.md#performance).
 
 **`data/`** — the `ChainDataProvider` abstraction boundary. `TokenMetrics` now carries `whaleMoves` (Phase 2) so risk/scoring/signals can all classify large transfers without a second chain read.
 

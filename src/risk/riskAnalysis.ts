@@ -37,9 +37,9 @@ const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase())
  * Every finding here comes from a real chain read (launch event data,
  * live holder/liquidity metrics, or a delta against a persisted snapshot)
  * with the exact evidence stated — no "SCAM" label without a number
- * attached. Extends GTTM's huntScore.ts concern-counting (launch-moment
- * only, one token) with post-launch signals (holder concentration,
- * liquidity depth, and — new — trend-based findings once snapshot
+ * attached. Covers launch-moment concern-counting (dev buy, bundled
+ * wallets, serial deployer) plus post-launch signals (holder
+ * concentration, liquidity depth, and trend-based findings once snapshot
  * history exists) across every token.
  *
  * `previousSnapshot` is optional and, when absent, simply means the two

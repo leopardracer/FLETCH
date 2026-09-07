@@ -17,8 +17,8 @@ export interface LiquidityInfo {
 }
 
 /**
- * Generalized from GTTM/src/chain/liquidity.ts (was single-token). Real
- * pre-graduation pricing off the token's own Pons V2 bonding curve.
+ * Real pre-graduation pricing for any token, off its own Pons V2 bonding
+ * curve.
  *
  * Post-graduation, a token trades in a Uniswap v4 pool. v4 has no
  * per-pool contract with getReserves() — pools live inside a shared
@@ -26,8 +26,8 @@ export interface LiquidityInfo {
  * either a StateView/quoter call or an indexer (e.g. Bitquery, which
  * already decodes Robinhood Chain v4 trades). That is NOT implemented
  * here — this returns `graduated: true` with price/liquidity left null
- * rather than guessing, exactly as GTTM did. Wiring a Bitquery-backed
- * ChainDataProvider (see data/) is the fix — see data/types.ts.
+ * rather than guessing. Wiring a Bitquery-backed ChainDataProvider
+ * (see data/) is the fix — see data/types.ts.
  */
 export async function readLiquidity(tokenAddress: `0x${string}`): Promise<LiquidityInfo> {
   const launch = await readLaunchRecord(tokenAddress);

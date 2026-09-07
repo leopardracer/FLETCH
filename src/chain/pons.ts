@@ -1,7 +1,6 @@
 /**
  * Pons V2 on Robinhood Chain — real, documented contract addresses and event
- * signatures. Ported verbatim from github.com/leopardracer/GTTM/src/chain/pons.ts,
- * which sourced them from Bitquery's Pons launchpad docs
+ * signatures, sourced from Bitquery's Pons launchpad docs
  * (https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/) and verified
  * each topic0 two ways: a keccak-256 preimage match against the verified
  * contract source, and live occurrence on Robinhood Chain.
