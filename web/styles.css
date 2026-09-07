@@ -42,12 +42,9 @@ a { color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 
-.wordmark {
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.01em;
-}
+.wordmark { font-weight: 700; font-size: 20px; letter-spacing: 0.01em; }
 .wordmark .dot { color: var(--orange-bright); }
+.logo { display: block; margin-bottom: 4px; border-radius: 2px; }
 
 .tagline {
   font-size: 13px;
@@ -68,6 +65,43 @@ a { color: inherit; }
 }
 .status .pip.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
 .status .pip.bad { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+.navbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.navlink {
+  font-size: 13px;
+  color: var(--ink-faint);
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s ease;
+}
+.navlink:hover { color: var(--ink); }
+.navlink.active {
+  color: var(--orange-bright);
+  border-bottom-color: var(--orange-bright);
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.overview-grid .panel-block { margin-bottom: 0; }
+.mini-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.mini-row:last-child { border-bottom: none; }
+.mini-row .sym { font-weight: 600; }
 
 main {
   max-width: 1180px;

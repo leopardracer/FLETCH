@@ -93,5 +93,17 @@ export function createServer() {
     }
   });
 
+  // Wallet activity for a token — see data/providers/rpcProvider.ts for the
+  // honest scope limitation (per-token accumulation, not cross-token history).
+  app.get("/api/tokens/:address/wallets", async (req, res) => {
+    try {
+      const address = req.params.address as `0x${string}`;
+      const activity = await provider.getWalletActivity(address);
+      res.json({ address, wallets: activity });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
   return app;
 }

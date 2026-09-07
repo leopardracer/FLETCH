@@ -1,100 +1,176 @@
-# FLETCH
+<p align="center">
+  <img src="./assets/banner.png" alt="FLETCH — meme intelligence for Robinhood Chain" width="100%">
+</p>
 
-The meme intelligence layer for Robinhood Chain. Answers: *what's happening right now, why, and should you pay attention* — for tokens launched on Pons V2.
+<p align="center">
+  <img alt="tests" src="https://img.shields.io/badge/tests-19%20passing-D9670C?style=flat-square&labelColor=14100C">
+  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A520-F2E9DD?style=flat-square&labelColor=14100C">
+  <img alt="chain" src="https://img.shields.io/badge/chain-4663-F2E9DD?style=flat-square&labelColor=14100C">
+  <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F2E9DD?style=flat-square&labelColor=14100C">
+  <img alt="fabricated data" src="https://img.shields.io/badge/fabricated%20data-0-D9670C?style=flat-square&labelColor=14100C">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-F2E9DD?style=flat-square&labelColor=14100C">
+</p>
 
-Not a trading bot. No execution path exists in this repo.
+<p align="center"><b>The meme moves first. FLETCH tells you why.</b></p>
 
-## Status: MVP, real data only, several components explicitly unavailable
+---
 
-Every number FLETCH shows is either a real chain read or a clearly labeled `unavailable` with a stated reason. Nothing is fabricated to make the UI look complete. See [What's real vs. not built yet](#whats-real-vs-not-built-yet) below before you rely on this for anything.
+Meme tokens on Robinhood Chain launch by the thousand, and most of what "moves" is noise. FLETCH is the intelligence layer that reads the chain directly — launches, trades, holders, liquidity, deployer behavior — and turns it into three plain-English answers: what's happening, why, and whether it's worth your attention. Every number is either a real chain read or explicitly marked `unavailable`. Nothing here is a fabricated demo dressed up as a live product.
 
-## Quick start
+FLETCH is **not** a token screener, a trading bot, an AI chatbot, or a price predictor. There is no execution path in this repository.
 
-```bash
+## What is FLETCH?
+
+A discovery feed, a risk engine, and an explanation layer, all reading the same source of truth: Pons V2 launch and trade events on Robinhood Chain.
+
+| The problem | What FLETCH does |
+|---|---|
+| Hundreds of new tokens a day, most of them noise | Ranks by **FLETCH Score** — an explainable blend of momentum, liquidity, holders, and safety — not by market cap |
+| "Is this a bundle / bot / bot-farm launch?" | Reads the launch transaction itself: dev-buy %, wallets exempted from the opening snipe tax, serial-deployer count — see [docs/RISK.md](./docs/RISK.md) |
+| "Why is this moving right now?" | A templated explanation built directly from the structured numbers FLETCH computed — never a free-form model call touching raw data — see [docs/SIGNALS.md](./docs/SIGNALS.md) |
+| Dashboards that quietly fake the numbers they can't get | Smart Money and Social components render `UNAVAILABLE` with a stated reason instead of a plausible-looking guess — see [docs/DATA.md](./docs/DATA.md) |
+| "Trust me, it's risky" | Every risk finding names its evidence — `top 10 holders own 82%`, not `high risk` |
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Robinhood Chain<br/>Pons V2 launches + trades] --> B[Data Provider]
+    B --> C[Risk Engine]
+    B --> D[Signal Detection]
+    C --> E[FLETCH Score]
+    D --> E
+    E --> F[AI Explanation]
+    C --> F
+    E --> G[API]
+    F --> G
+    B --> G
+    G --> H[Dashboard]
+```
+
+Full breakdown, including why the data-provider boundary exists and what it unlocks later: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+
+## Early Signals
+
+The discovery feed scans the Pons V2 factory for every `TokenLaunched` event and ranks by FLETCH Score — not market cap, not recency. Age, dev-buy %, risk level, and score all come from the same real chain reads.
+
+```
+TOKEN       AGE     DEV BUY   RISK      FLETCH SCORE
+```
+*(shape shown — see [Live Data](#live-data) below; this repo doesn't ship fabricated rows to fill that table in.)*
+
+Details on what counts as a signal today, and what the brief describes that isn't built yet (acceleration signals need a snapshot history this MVP doesn't have): [docs/SIGNALS.md](./docs/SIGNALS.md).
+
+## FLETCH Score
+
+Six components, each either a real number or an explicit `null` with a reason. The overall score re-weights across only the components that are actually available for a given token — a token isn't punished for Smart Money and Social not existing yet.
+
+```
+DEMO — illustrative shape only, not a real token's output
+
+$ARROWCAT                                    FLETCH SCORE   91
+
+  MOMENTUM       96      buy pressure + activity level, since launch
+  SMART MONEY    UNAVAILABLE   no cross-token wallet history store yet
+  HOLDERS        91      holder count (lifetime, from launch block)
+  LIQUIDITY      82      curve balance, converted to USD
+  SAFETY         71      inverse of the risk report
+```
+
+Exact formulas, weight re-normalization, and what "not yet a growth rate" means for Holder Growth: [docs/SCORING.md](./docs/SCORING.md).
+
+## Why is it moving?
+
+Every bullet traces back to a number FLETCH already computed — buy/sell counts, holder count, liquidity, risk findings. This is deliberately **not** a free-form LLM call: the safest way to guarantee the brief's "AI must never invent blockchain data" rule is to never let generated text see raw numbers and write from scratch. See `src/ai/explain.ts` and its test file for exactly what that means in code.
+
+```
+DEMO — illustrative shape only
+
+WHY IS IT MOVING?
+  18 buys vs 3 sells since launch
+  312 holders tracked (lifetime)
+  liquidity currently $41,800
+  smart-money activity: unavailable (no wallet history store yet)
+
+RISK
+  [HIGH] top 10 holders own 61% of tracked supply
+  [MEDIUM] liquidity is $41,800 — thin
+```
+
+## Risk Intelligence
+
+`LOW` / `MEDIUM` / `HIGH` / `CRITICAL`, never a bare "SCAM." Launch-moment checks (dev buy, bundled wallets, serial deployer) come from GTTM's original launch analysis, generalized to every token instead of one; ongoing checks (holder concentration, liquidity depth) are new in FLETCH. Full threshold table and what isn't checked yet (mint permissions, blacklist functions — needs bytecode analysis, not built): [docs/RISK.md](./docs/RISK.md).
+
+## Smart Money
+
+Not implemented as real intelligence yet — and the dashboard says so, in `src/wallets/smartMoney.ts` and on the Wallets tab, rather than shipping a leaderboard built on nothing. Real win-rate/early-entry tracking needs either a persistence layer accumulating outcomes over weeks-to-months, or an indexer with that history already built. See [docs/DATA.md](./docs/DATA.md#smart-money) for exactly what closes this gap.
+
+## Architecture
+
+`chain/` (raw Robinhood Chain + Pons V2 reads) → `data/` (the `ChainDataProvider` abstraction) → `risk/` + `scoring/` + `ai/` (pure, unit-tested logic) → `api/` (Express) → `web/` (dashboard).
+
+The `ChainDataProvider` interface is the seam that lets a Bitquery-backed provider (unlocks post-graduation Uniswap v4 pricing, decoded trade history, wallet tracking) get swapped in later without touching scoring, risk, or the API. Full writeup: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+
+## Quick Start
+
+Every command below is a real script in [`package.json`](./package.json) — nothing here is invented.
+
+```sh
+git clone https://github.com/leopardracer/FLETCH.git
+cd FLETCH
 npm install
 cp .env.example .env
-# fill in RPC_URL — see .env.example for where to get one
+# edit .env — at minimum, set RPC_URL (see .env.example for where to get one)
 npm run dev
 # open http://localhost:8787
 ```
 
-`RPC_URL` is required for anything to work. The chain's public endpoint
-(`https://rpc.mainnet.chain.robinhood.com`, chain ID 4663) is rate-limited
-and fine for development; for anything beyond light use, get a dedicated
-endpoint (Quicknode, Alchemy, etc.) — see https://docs.robinhood.com/chain/.
+`RPC_URL` is required — there's no default baked in, on purpose (see `src/core/config.ts`). Full environment variable reference and what each optional one unlocks: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
-`BLOCKSCOUT_API_KEY` is optional (free key at https://dev.blockscout.com).
-Without it, FLETCH works entirely off raw RPC log scanning — slower per
-call, but functionally complete for the MVP. **The Blockscout acceleration
-path (`src/data/providers/blockscoutProvider.ts`) has not been exercised
-against a live key in this environment's sandbox (outbound network here
-is allowlisted to package registries only) — smoke-test it against your
-own key before depending on it.**
+## Live Data
 
-## What's real vs. not built yet
+FLETCH reads Robinhood Chain directly — no seed data, no fixtures shipped in the repo. What's real today versus what's `unavailable` and why: [docs/DATA.md](./docs/DATA.md). Short version:
 
-**Real, live chain data:**
-- New-token discovery — every `TokenLaunched` event on the Pons V2 factory
-- Launch-moment risk signals — dev-buy %, bundled/exempt wallets, serial-deployer detection
-- Holder count + top accumulators + whale moves — full `Transfer` log replay from launch block
-- Pre-graduation liquidity and price — the bonding curve's own balance and last trade
-- Buy/sell counts and volume in the pair asset, since launch
-- USD conversion via CoinGecko (best-effort; shows `unavailable` if the feed fails)
-- FLETCH Score's Momentum, Liquidity, Holder Growth, and Safety components
-- Risk levels (LOW/MEDIUM/HIGH/CRITICAL) with the exact evidence for each finding
+**Real:** new-token discovery, launch risk signals, holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Safety), risk levels with evidence.
 
-**Explicitly unavailable — not faked:**
-- **Post-graduation (Uniswap v4) pricing.** v4 pools live in a shared PoolManager with no per-pool `getReserves()` — reading real price/liquidity there needs a StateView/quoter call or an indexer (Bitquery already decodes Robinhood Chain v4 trades; wiring that in is the fix, not implemented here).
-- **Smart Money.** No cross-token wallet-performance history exists — that needs either a persistence layer accumulating outcomes over weeks/months, or an indexer with that history already built. `src/wallets/smartMoney.ts` returns `unavailable` rather than a fake leaderboard.
-- **Social.** No reliable social-mentions/sentiment source for Robinhood Chain tokens was identified. `src/social/social.ts` returns `unavailable`. Wiring the X/Twitter API or a listening vendor is a real cost decision, not a code gap.
-- **Holder growth rate.** Scores absolute holder count today, not a trend — there's no snapshot history store yet to diff against.
+**Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, Smart Money wallet history, Social signal, holder-growth *rate* (vs. absolute count).
 
-The FLETCH Score only weights the components that are actually available for a given token, and shows why the rest aren't — see `src/scoring/fletchScore.ts`.
+## Demo
 
-## Architecture
+Every `DEMO`-labeled block above is illustrative shape, not real output — this repo doesn't ship a screenshot gallery built from fabricated tokens. To see real output: run [Quick Start](#quick-start) against a live `RPC_URL`, or generate real dashboard screenshots yourself with `npm run screenshot` (needs Playwright — see `scripts/screenshot.mjs` for why that's a separate install rather than a project dependency).
 
-```
-src/
-  core/      config, price feed
-  chain/     Robinhood Chain + Pons V2 reads (viem) — ported and generalized
-             from github.com/leopardracer/GTTM's sniper engine, which
-             verified these contract addresses/event signatures against
-             Bitquery's Pons docs and live chain occurrence
-  data/      ChainDataProvider interface — the abstraction boundary.
-             Everything above this layer depends only on data/types.ts,
-             never on viem or a specific provider directly. A Bitquery-
-             backed provider (unlocks v4 pricing, decoded trades, wallet
-             history) can implement the same interface later without
-             touching scoring/risk/api.
-  risk/      LOW/MEDIUM/HIGH/CRITICAL findings with evidence
-  wallets/   smart-money tracking (currently: honest UNAVAILABLE stub)
-  social/    social signal (currently: honest UNAVAILABLE stub)
-  scoring/   the FLETCH Score — weights only available components
-  ai/        "why is it moving" — templated from structured signals,
-             never a free-form model call touching raw numbers
-  api/       Express server + static dashboard host
-web/         dashboard (dark burnt-orange terminal aesthetic per brief —
-             no logo/brand files existed in the repo to preserve, so this
-             is a first pass, not a restoration of an existing identity)
+## Development
+
+Setup, environment variables, test suite, and the current next-steps list: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+
+```sh
+npm test
 ```
 
-## API
+19 tests, all against pure scoring/risk/explanation logic — no network required. `npm run build` type-checks and compiles; `npm run dev` does both and starts the server.
 
-- `GET /api/health` — chain connectivity check
-- `GET /api/tokens?window=<blocks>` — Early Signals feed, ranked by FLETCH Score
-- `GET /api/tokens/:address` — full token intelligence page (metrics, score, risk, why-it's-moving)
+## Roadmap
 
-## Known limitations
+Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-steps):
 
-- `getNewTokens`/the feed endpoint does a few RPC round-trips per detected launch (dev-buy + exempt-wallet lookups) — fine for a normal window, slow on a very busy one with a rate-limited public RPC. A batched multicall is the obvious next step.
-- Holder counts are computed by replaying every `Transfer` log from launch — exact, but doesn't scale to "continuously score hundreds of live tokens." Either Blockscout's counters endpoint (see above, unverified here) or a real indexer is the path past this.
-- No database. Nothing persists between requests — every call recomputes from the chain. Wallet-history and holder-growth-rate both need one.
-- No tests yet beyond the type-check. Scoring/risk logic is pure and unit-testable — that's the natural first test target.
+1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
+2. Persistence layer (snapshots) → real holder-growth rate and acceleration signals
+3. Evaluate Bitquery for Uniswap v4 pricing and decoded trade history — a provider swap, not a rewrite
+4. Decide on a social data source, or keep it honestly unavailable
+5. Wallet-clustering detection off existing transfer data
+6. Batch per-launch RPC calls in the feed endpoint via multicall
 
-## What to build next
+## Built on
 
-1. Smoke-test the Blockscout provider against a real key; wire it into the feed endpoint to cut per-token RPC round-trips
-2. Add persistence (Postgres is fine) for score/holder history — unlocks real holder-growth-rate and is the prerequisite for smart-money tracking
-3. Evaluate Bitquery for v4 post-graduation pricing and decoded trade history — the ChainDataProvider interface is designed for this to be a provider swap, not a rewrite
-4. Decide on and wire a social data source, or leave it explicitly unavailable long-term
-5. Real brand/logo assets for the dashboard — none exist in the repo yet
+| Source | What was reused |
+|---|---|
+| [`leopardracer/GTTM`](https://github.com/leopardracer/GTTM) | Pons V2 factory/curve/router contract addresses and event ABIs, the chain client, and the launch-risk pattern-matching this repo generalized from one token to every token |
+| [docs.robinhood.com/chain](https://docs.robinhood.com/chain/) | RPC endpoint, chain ID, network model |
+| [Bitquery's Pons launchpad docs](https://docs.bitquery.io/docs/blockchain/robinhood/pons-api/) | cross-verification for the Pons V2 contract addresses and event signatures (via GTTM) |
+| [Blockscout](https://robinhoodchain.blockscout.com) | official Robinhood Chain explorer; optional holder-count acceleration API |
+
+FLETCH is independent of Pons and Robinhood, refers to the network as "Robinhood Chain," and uses none of their marks.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

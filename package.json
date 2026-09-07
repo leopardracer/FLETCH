@@ -1,14 +1,31 @@
 {
   "name": "fletch",
   "version": "0.1.0",
-  "description": "FLETCH — the meme intelligence layer for Robinhood Chain. Real onchain data, explainable scoring, no fabricated signals.",
+  "description": "Meme intelligence for Robinhood Chain — real onchain signals, an explainable score, and no fabricated data.",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/leopardracer/FLETCH#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leopardracer/FLETCH.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leopardracer/FLETCH/issues"
+  },
+  "keywords": [
+    "robinhood-chain",
+    "meme-tokens",
+    "onchain-intelligence",
+    "pons-v2",
+    "risk-analysis",
+    "typescript"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json && node dist/index.js",
     "start": "node dist/index.js",
-    "test": "tsc -p tsconfig.json && node --test dist/**/*.test.js"
+    "test": "tsc -p tsconfig.json && node --test dist/**/*.test.js",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {
     "viem": "^2.21.0",
