@@ -27,7 +27,7 @@
     "test": "tsc -p tsconfig.json && node --test dist/**/*.test.js",
     "test:watch": "tsc -p tsconfig.json && node --test --watch dist/**/*.test.js",
     "test:coverage": "tsc -p tsconfig.json && node --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.js\" dist/**/*.test.js",
-    "test:integration": "tsc -p tsconfig.json && node --test dist/signals/signalService.test.js dist/radar/radarService.test.js dist/api/server.test.js",
+    "test:integration": "tsc -p tsconfig.json && node --test dist/signals/signalService.test.js dist/radar/radarService.test.js dist/monitoring/monitoringService.test.js dist/monitoring/monitoringService.stress.test.js dist/api/server.test.js",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {

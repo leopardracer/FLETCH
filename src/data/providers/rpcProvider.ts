@@ -113,6 +113,7 @@ export class RpcChainDataProvider implements ChainDataProvider {
         txHash: w.txHash as `0x${string}`,
         blockNumber: BigInt(w.blockNumber),
       })),
+      graduated: liquidity.graduated ?? null,
     };
   }
 

@@ -64,6 +64,22 @@ export function getDistinctTokensWithRecentSignals(sinceTimestamp: number): stri
   return rows.map((r) => r.token);
 }
 
+/** Deletes signals older than `cutoffTimestamp` across every token — the
+ *  bounded-storage side of SIGNAL_RETENTION_DAYS. Returns rows removed. */
+export function pruneSignalsOlderThan(cutoffTimestamp: number): number {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM signals WHERE taken_at < ?`).run(cutoffTimestamp);
+  return Number(result.changes);
+}
+
+/** How many signals (across every token) fired at or after
+ *  `sinceTimestamp` — feeds GET /api/monitoring's "recent activity" view. */
+export function countSignalsSince(sinceTimestamp: number): number {
+  const db = getDb();
+  const row = db.prepare(`SELECT COUNT(*) as n FROM signals WHERE taken_at >= ?`).get(sinceTimestamp) as { n: number };
+  return row.n;
+}
+
 function rowToSignal(row: any): StoredSignal {
   return {
     token: row.token,

@@ -120,7 +120,12 @@ export function analyzeRisk(
 
   // Trend-based findings — only when a prior snapshot actually exists.
   if (metrics && previousSnapshot) {
-    if (metrics.liquidityUsd !== null && previousSnapshot.liquidityUsd !== null && previousSnapshot.liquidityUsd > 0) {
+    // Same phase-transition guard as signals/signalEngine.ts's PHASE_CHANGE
+    // handling — don't call a legitimate graduation a "deterioration".
+    const phaseChanged =
+      previousSnapshot.graduated !== null && metrics.graduated !== null && previousSnapshot.graduated !== metrics.graduated;
+
+    if (!phaseChanged && metrics.liquidityUsd !== null && previousSnapshot.liquidityUsd !== null && previousSnapshot.liquidityUsd > 0) {
       const dropPct = ((previousSnapshot.liquidityUsd - metrics.liquidityUsd) / previousSnapshot.liquidityUsd) * 100;
       if (dropPct > 30) {
         findings.push({

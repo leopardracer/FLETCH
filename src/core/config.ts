@@ -30,6 +30,14 @@ const envSchema = z.object({
   POLL_INTERVAL_MS: z.coerce.number().default(300_000), // 5 min — see docs/ARCHITECTURE.md on why this isn't more aggressive against a shared public RPC
   POLL_TOKEN_LIMIT: z.coerce.number().default(15),
   SNAPSHOT_MIN_INTERVAL_SECONDS: z.coerce.number().default(60), // don't record near-duplicate snapshots from rapid page views
+
+  // --- Continuous monitoring (docs/MONITORING.md) ---
+  DISCOVERY_INTERVAL_MS: z.coerce.number().default(300_000), // how often to scan for new launches and add them to the monitoring queue
+  MAX_CONCURRENT_TOKENS: z.coerce.number().default(5), // in-flight chain reads per monitoring cycle — bounds RPC load regardless of queue size
+  MAX_MONITORED_TOKENS: z.coerce.number().default(500), // hard cap on the monitoring queue — bounded storage/RPC even if launches vastly outpace check capacity
+  MAX_CONSECUTIVE_FAILURES: z.coerce.number().default(5), // a token failing this many checks in a row is marked FAILED and stops being scheduled, so one permanently-broken address can't retry forever
+  SIGNAL_RETENTION_DAYS: z.coerce.number().default(30),
+  SNAPSHOT_RETENTION_DAYS: z.coerce.number().default(30),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -58,6 +66,12 @@ export const config = {
   pollIntervalMs: env.POLL_INTERVAL_MS,
   pollTokenLimit: env.POLL_TOKEN_LIMIT,
   snapshotMinIntervalSeconds: env.SNAPSHOT_MIN_INTERVAL_SECONDS,
+  discoveryIntervalMs: env.DISCOVERY_INTERVAL_MS,
+  maxConcurrentTokens: env.MAX_CONCURRENT_TOKENS,
+  maxMonitoredTokens: env.MAX_MONITORED_TOKENS,
+  maxConsecutiveFailures: env.MAX_CONSECUTIVE_FAILURES,
+  signalRetentionDays: env.SIGNAL_RETENTION_DAYS,
+  snapshotRetentionDays: env.SNAPSHOT_RETENTION_DAYS,
 
   /** True when Blockscout's accelerated holder/tx endpoints are usable —
    *  otherwise providers must fall back to raw RPC log replay. */

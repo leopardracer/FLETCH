@@ -15,7 +15,8 @@ export type SignalType =
   | "BUNDLED_WALLETS"
   | "SERIAL_DEPLOYER"
   | "HOLDER_CONCENTRATION"
-  | "THIN_LIQUIDITY";
+  | "THIN_LIQUIDITY"
+  | "PHASE_CHANGE";
 
 export type SignalSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 

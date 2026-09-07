@@ -20,6 +20,7 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     volumePairAssetWindow: null,
     topHolderConcentrationPercent: null,
     whaleMoves: [],
+    graduated: null,
     ...overrides,
   };
 }
@@ -43,6 +44,7 @@ function snapshot(overrides: Partial<TokenSnapshot> = {}): TokenSnapshot {
     whaleActivityScore: null,
     safetyScore: null,
     riskLevel: null,
+    graduated: null,
     ...overrides,
   };
 }
@@ -167,4 +169,37 @@ test("activity acceleration reports a real trades-per-minute rate derived from t
 test("every signal timestamp equals the injected `now`, never a live clock read inside detection", () => {
   const signals = detectSignals({ metrics: metrics({ buyCountWindow: 10, sellCountWindow: 1 }), risk: CLEAN_RISK, previousSnapshot: null, now: NOW });
   assert.ok(signals.every((s) => s.timestamp === NOW));
+});
+
+test("a token graduating between two snapshots emits PHASE_CHANGE as its own real event", () => {
+  const prev = snapshot({ graduated: false, takenAt: NOW - 600 });
+  const signals = detectSignals({ metrics: metrics({ graduated: true }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW });
+  const phaseChange = signals.find((s) => s.type === "PHASE_CHANGE");
+  assert.ok(phaseChange);
+  assert.match(phaseChange!.evidence, /graduated/);
+});
+
+test("a legitimate liquidity change caused by graduation is never reported as LIQUIDITY_DECREASE — the phase guard suppresses it", () => {
+  const prev = snapshot({ graduated: false, liquidityUsd: 40_000, takenAt: NOW - 600 });
+  // Even if a future provider did return a real (lower) post-graduation liquidity number,
+  // the phase-change guard must suppress the comparison rather than call it a collapse.
+  const signals = detectSignals({
+    metrics: metrics({ graduated: true, liquidityUsd: 5_000 }),
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    now: NOW,
+  });
+  assert.equal(signals.some((s) => s.type === "LIQUIDITY_DECREASE" || s.type === "LIQUIDITY_INCREASE"), false);
+});
+
+test("liquidity signals fire normally when the phase hasn't changed — the guard doesn't suppress real trend detection", () => {
+  const prev = snapshot({ graduated: false, liquidityUsd: 40_000, takenAt: NOW - 600 });
+  const signals = detectSignals({ metrics: metrics({ graduated: false, liquidityUsd: 5_000 }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW });
+  assert.ok(signals.some((s) => s.type === "LIQUIDITY_DECREASE"));
+});
+
+test("no PHASE_CHANGE when the phase is unknown on either side — never guessed from incomplete data", () => {
+  const prev = snapshot({ graduated: null, takenAt: NOW - 600 });
+  const signals = detectSignals({ metrics: metrics({ graduated: true }), risk: CLEAN_RISK, previousSnapshot: prev, now: NOW });
+  assert.equal(signals.some((s) => s.type === "PHASE_CHANGE"), false);
 });

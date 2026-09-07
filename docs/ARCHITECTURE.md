@@ -22,8 +22,12 @@ flowchart TD
     E --> F
     B --> F
     D --> P
-    Poller[poller/<br/>background interval] --> B
-    Poller --> P
+    M[monitoring/<br/>monitoringStore] --> P
+    M --> F
+    Mon[monitoring/<br/>monitoringService] --> B
+    Mon --> M
+    Mon --> Sig[signals/<br/>signalService]
+    Poller[poller/<br/>background interval] --> Mon
     F --> G[web/<br/>dashboard]
 ```
 
@@ -45,9 +49,11 @@ flowchart TD
 
 **`ai/`** — `explain.ts` now builds "why is it moving" directly from the `Signal[]` array the signal engine produced, instead of re-deriving bullets from raw metrics independently. Same non-negotiable rule as before: templated rendering of already-computed numbers, never a free-form model call touching raw data.
 
-**`poller/`** *(new in Phase 2)* — `poller.ts` runs `analyzeAndPersist` on an interval across the most recently launched tokens, so snapshot/signal history accumulates continuously instead of only when someone opens a token page. Off if `RPC_URL` is unset; otherwise on by default with a conservative interval — see [DEVELOPMENT.md](./DEVELOPMENT.md).
+**`poller/`** — `poller.ts` is now a thin entrypoint: it starts `monitoring/monitoringService.ts`'s discovery and monitoring cycles on their own independent intervals (`DISCOVERY_INTERVAL_MS`, `POLL_INTERVAL_MS`). Off if `RPC_URL` is unset; otherwise on by default with conservative intervals — see [MONITORING.md](./MONITORING.md).
 
 **`radar/`** *(new — Meme Radar)* — `radarEngine.ts` is a pure function ranking tokens by recency-weighted signal convergence, not size or FLETCH Score. `radarService.ts` reads candidates and their latest snapshot entirely from persistence — ranking needs no live chain call. See [docs/RADAR.md](./RADAR.md).
+
+**`monitoring/`** *(new — Continuous Monitoring)* — `monitoringStore.ts` is the durable, restart-safe monitoring queue (`monitored_tokens`), including cached launch-moment facts so they're never re-derived from raw logs on every later check. `monitoringService.ts` is the orchestration layer: bounded-window discovery, priority-scheduled snapshot collection with bounded concurrency (a small manual worker pool, no new dependency), and retention pruning — all dependency-injected (`MonitoringDeps`) so tests run against fakes, never live RPC. Every real check still goes through `signals/signalService.ts`'s existing `analyzeAndPersist()` — this layer schedules and bounds work, it does not duplicate signal semantics. See [docs/MONITORING.md](./MONITORING.md).
 
 **`api/`** — Express routes, plus static-hosting the dashboard in `web/`.
 

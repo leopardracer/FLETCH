@@ -26,6 +26,12 @@ const ENV_KEYS = [
   "POLL_INTERVAL_MS",
   "POLL_TOKEN_LIMIT",
   "SNAPSHOT_MIN_INTERVAL_SECONDS",
+  "DISCOVERY_INTERVAL_MS",
+  "MAX_CONCURRENT_TOKENS",
+  "MAX_MONITORED_TOKENS",
+  "MAX_CONSECUTIVE_FAILURES",
+  "SIGNAL_RETENTION_DAYS",
+  "SNAPSHOT_RETENTION_DAYS",
 ];
 
 async function freshConfig(overrides: Record<string, string>) {
@@ -94,4 +100,21 @@ test("unset numeric fields fall back to their documented defaults, not zero or u
   assert.equal(c.chainId, 4663);
   assert.equal(c.port, 8787);
   assert.equal(c.signalWindowBlocks, 50_000n);
+});
+
+test("monitoring config has safe, bounded defaults — never zero/unbounded, which could hammer the RPC provider", async () => {
+  const c = await freshConfig({});
+  assert.ok(c.discoveryIntervalMs >= 60_000);
+  assert.ok(c.maxConcurrentTokens > 0 && c.maxConcurrentTokens <= 20);
+  assert.ok(c.maxMonitoredTokens > 0);
+  assert.ok(c.maxConsecutiveFailures > 0);
+  assert.ok(c.signalRetentionDays > 0);
+  assert.ok(c.snapshotRetentionDays > 0);
+});
+
+test("monitoring config values coerce from env strings to real numbers", async () => {
+  const c = await freshConfig({ MAX_CONCURRENT_TOKENS: "3", MAX_MONITORED_TOKENS: "50", SIGNAL_RETENTION_DAYS: "7" });
+  assert.equal(c.maxConcurrentTokens, 3);
+  assert.equal(c.maxMonitoredTokens, 50);
+  assert.equal(c.signalRetentionDays, 7);
 });

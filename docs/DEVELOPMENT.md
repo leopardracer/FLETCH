@@ -34,6 +34,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | Endpoint | Returns |
 |---|---|
 | `GET /api/health` | chain connectivity, Blockscout/poller config state |
+| `GET /api/monitoring` | is FLETCH actually watching the chain right now — queue counts, recent activity, no secrets (see [docs/MONITORING.md](./MONITORING.md)) |
 | `GET /api/tokens?window=<blocks>` | Tokens feed — new launches ranked by FLETCH Score |
 | `GET /api/radar?window=<seconds>&limit=<n>` | Meme Radar — tokens ranked by recency-weighted signal convergence, not size (see [docs/RADAR.md](./RADAR.md)) |
 | `GET /api/signals?limit=<n>` | Chain-wide live signal feed, severity then recency |
@@ -52,6 +53,7 @@ See `.env.example` for the full, current list with inline explanations. The impo
 - `DB_PATH` — SQLite file path, default `./fletch.db`. Delete it to reset all history.
 - `ENABLE_POLLER` / `POLL_INTERVAL_MS` / `POLL_TOKEN_LIMIT` — the background snapshot poller (see [Persistence](#persistence)). Only starts if `RPC_URL` is set.
 - `SNAPSHOT_MIN_INTERVAL_SECONDS` — minimum gap between two recorded snapshots for the same token.
+- `DISCOVERY_INTERVAL_MS` / `MAX_CONCURRENT_TOKENS` / `MAX_MONITORED_TOKENS` / `MAX_CONSECUTIVE_FAILURES` / `SIGNAL_RETENTION_DAYS` / `SNAPSHOT_RETENTION_DAYS` — continuous monitoring (see [docs/MONITORING.md](./MONITORING.md)). All have bounded, conservative defaults.
 
 ## Persistence
 
@@ -81,8 +83,8 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 133 tests across 15 files |
-| `npm run test:integration` | Just the two files that exercise multiple layers together (see below) |
+| `npm test` | The full suite — 182 tests across 18 files |
+| `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
 
@@ -90,32 +92,35 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | File | Tests | Covers |
 |---|---|---|
-| `signals/signalEngine.test.ts` | 12 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all four trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), and that nothing fires without the data to back it |
+| `signals/signalEngine.test.ts` | 16 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), `PHASE_CHANGE`, the phase-transition guard on liquidity signals, and that nothing fires without the data to back it |
 | `radar/radarEngine.test.ts` | 13 | every Radar formula constant: per-severity magnitude, recency decay, the convergence multiplier, the 0–100 clamp, and that volume (the same signal repeating) never scores higher than the same signal firing once |
 | `signals/types.test.ts` | 4 | `pickTopSignal` — regression test for a real bug where the API surfaced the first-detected signal instead of the most severe one |
 | `scoring/fletchScore.test.ts` | 11 | every component formula, weight re-normalization when components are unavailable, the whale-activity availability rule (unavailable only when the scan itself failed, not when it found zero whales), the real-vs-proxy holder-growth branch |
-| `risk/riskAnalysis.test.ts` | 10 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history |
-| `persistence/snapshots.test.ts` | 12 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping, latest-snapshot lookup and risk-level persistence for Meme Radar |
+| `risk/riskAnalysis.test.ts` | 12 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history, and the phase-transition guard suppressing a false "collapse" across a graduation |
+| `persistence/snapshots.test.ts` | 16 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping, latest-snapshot lookup, risk-level and phase persistence, retention pruning, and recent-activity counts |
 | `ai/explain.test.ts` | 7 | every bullet traces to a real signal's own text; risk-derived signal types don't get double-shown |
-| `persistence/signalsStore.test.ts` | 11 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries and distinct-token discovery for Meme Radar |
+| `persistence/signalsStore.test.ts` | 14 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries, distinct-token discovery for Meme Radar, retention pruning, and recent-activity counts |
 | `persistence/walletActivityStore.test.ts` | 6 | profile aggregation, token-breadth dedup, per-wallet isolation |
 | `wallets/walletScore.test.ts` | 5 | every metric is explicitly `NOT_YET_IMPLEMENTED` with a stated reason — never a computed number, even with a long recorded history |
-| `core/config.test.ts` | 8 | env parsing, including a regression test for a real boolean-coercion bug this pass found and fixed (see below) |
+| `core/config.test.ts` | 10 | env parsing, including regression tests for a real boolean-coercion bug and the bounded, safe defaults of every new monitoring parameter |
 | `poller/poller.test.ts` | 1 | the `ENABLE_POLLER=false` off-switch actually schedules nothing |
+| `monitoring/monitoringStore.test.ts` | 13 | discovery dedup, priority-ordered scheduling, the consecutive-failure cutoff, that a failure never touches real metric data, and that a stored launch (including its bigint fields) round-trips exactly |
 
 **Integration tests** (`npm run test:integration`):
 
 | File | Tests | Covers |
 |---|---|---|
-| `signals/signalService.test.ts` | 10 | the real pipeline — chain metrics → risk → score → signals → persistence — through `analyzeAndPersist`, the one function every real code path (API, poller) calls. Includes signal deduplication: a rapid repeat read must not re-file identical signal rows, but a genuinely later read must |
+| `signals/signalService.test.ts` | 10 | the real pipeline — chain metrics → risk → score → signals → persistence — through `analyzeAndPersist`, the one function every real code path (API, monitoring) calls. Includes signal deduplication: a rapid repeat read must not re-file identical signal rows, but a genuinely later read must |
 | `radar/radarService.test.ts` | 9 | persisted signals + snapshots → ranked Radar entries through `getRadar()`, the real function the API calls. Sorting, window exclusion, honest nulls when a token has signals but no snapshot yet, and that symbol resolution degrades to `null` instead of throwing without `RPC_URL` |
-| `api/server.test.ts` | 14 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, never a crash or hang) |
+| `monitoring/monitoringService.test.ts` | 17 | discovery → queue → bounded monitoring cycle → `analyzeAndPersist`, using dependency-injected fake providers (never live RPC): successful checks persisting real snapshots, failed checks never writing fake metrics, the consecutive-failure cutoff, one broken token never blocking the rest of a batch, and every priority tier |
+| `monitoring/monitoringService.stress.test.ts` | 3 | the scheduler at 100 and 1,000 fake monitored tokens — real (not just configured) bounded concurrency, zero duplicate work, and discovery capped at `MAX_MONITORED_TOKENS` even with 1,000 simultaneous launches. Explicitly does not claim 10,000-token support — see [docs/MONITORING.md#scale](./MONITORING.md#scale) |
+| `api/server.test.ts` | 15 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, and that `/api/monitoring` never leaks a secret) |
 
-**Two real bugs this test pass found and fixed** (not hypothetical — both reproduced before the fix):
+**Bugs this project's test-writing has found and fixed** (not hypothetical — each reproduced before the fix):
 - `ENABLE_POLLER=false` in `.env` was silently ignored. `z.coerce.boolean()` uses JS's `Boolean(value)` coercion, and `Boolean("false")` is `true` — any non-empty string coerces truthy. Fixed with a proper string-aware parser; regression test in `core/config.test.ts`.
 - Signal history wasn't deduplicated. Snapshots were correctly rate-limited, but every detected signal was still persisted on every call regardless — three rapid page views wrote three identical `BUY_PRESSURE` rows. Fixed by only persisting signals alongside a genuinely new snapshot.
-
-**One more, found during the product-polish pass:** the `topSignal` field on `GET /api/tokens` rows was `signals[0]` — the first signal detected in the engine's fixed code order (buy/sell pressure, then whale moves, then risk-promoted findings, then trend signals), not the most severe one. A CRITICAL holder-concentration finding could sit unshown behind a LOW buy-pressure signal. Fixed with a dedicated, tested `pickTopSignal()` helper (`signals/types.ts`) that actually sorts by severity — see `signals/types.test.ts`.
+- The `topSignal` field on `GET /api/tokens` rows was `signals[0]` — the first signal detected in the engine's fixed code order, not the most severe one. Fixed with a dedicated, tested `pickTopSignal()` helper.
+- (Continuous Monitoring phase) The original poller re-derived launch-moment facts (curve address, dev-buy data) from raw chain logs on every single cycle, for every token, forever — a real, needless RPC cost once a durable queue made "check the same token repeatedly" the normal case instead of a coincidence. Fixed by caching those facts once at discovery (`monitored_tokens.launch_json`).
 
 ## Coverage
 
@@ -125,14 +130,14 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-75.89% line coverage / 78.24% branch / 70.20% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+79.79% line coverage / 81.28% branch / 71.96% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
-| `signals/`, `scoring/`, `risk/`, `ai/`, `persistence/`, `wallets/walletScore.ts` | 91–100% | pure logic or fully mockable via in-memory SQLite — no excuse not to cover it |
-| `api/server.ts` | 67% | the success paths that need a live RPC connection are the uncovered lines; every error path is covered |
-| `chain/*.ts`, `data/providers/rpcProvider.ts` | 23–96% (mostly low) | these call `viem` against a real RPC endpoint — meaningfully testing them needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. Not covered by unit tests; exercised manually against a real `RPC_URL` instead |
-| `poller/poller.ts` | 50% | only the off-switch is unit-tested (see above); its actual work is `analyzeAndPersist`, which is fully covered by the integration suite |
+| `signals/`, `scoring/`, `risk/`, `ai/`, `persistence/`, `monitoring/`, `wallets/walletScore.ts` | 90–100% | pure logic or fully mockable via in-memory SQLite and dependency-injected fakes — no excuse not to cover it |
+| `api/server.ts` | ~70% | the success paths that need a live RPC connection are the uncovered lines; every error path is covered |
+| `chain/*.ts`, `data/providers/rpcProvider.ts` | mostly low | these call `viem` against a real RPC endpoint — meaningfully testing them needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. Not covered by unit tests; exercised manually against a real `RPC_URL` instead |
+| `poller/poller.ts` | ~50% | only the off-switch is unit-tested; its actual work is `monitoringService.ts`'s cycles, which are fully covered separately |
 | `social.ts`, `wallets/smartMoney.ts` | low % but tiny | these are one-function honest-unavailable stubs — low coverage on a five-line file isn't a meaningful signal |
 
 ## Continuous Integration
@@ -154,3 +159,5 @@ Roughly in priority order:
 5. Decide on and wire a social data source, or keep it explicitly unavailable long-term.
 6. Wallet-clustering detection off existing transfer data.
 7. Batch the feed endpoint's per-launch RPC calls via multicall.
+8. Automatic reactivation of a `FAILED` monitored token after a longer cool-off, instead of requiring a process restart (see [MONITORING.md](./MONITORING.md)).
+9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice.

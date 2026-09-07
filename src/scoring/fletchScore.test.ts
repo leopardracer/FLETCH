@@ -21,6 +21,7 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     volumePairAssetWindow: null,
     topHolderConcentrationPercent: null,
     whaleMoves: [],
+    graduated: null,
     ...overrides,
   };
 }

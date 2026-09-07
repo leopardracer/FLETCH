@@ -23,6 +23,11 @@ export interface TokenSnapshot {
    *  which needs a real risk level without a live chain call. Nullable
    *  because snapshots recorded before this field existed won't have it. */
   riskLevel: RiskLevel | null;
+  /** null = unknown (no launch record found). Persisted so change-detection
+   *  can tell a real metric shift apart from one caused by the token
+   *  graduating between two snapshots — see signals/signalEngine.ts and
+   *  docs/MONITORING.md. */
+  graduated: boolean | null;
 }
 
 /**
@@ -57,8 +62,8 @@ export function recordSnapshot(
     `INSERT INTO token_snapshots
       (token, taken_at, price_in_pair, liquidity_usd, holder_count, buy_count_window, sell_count_window,
        volume_pair_asset_window, top_holder_concentration_pct, fletch_score, momentum_score, liquidity_score,
-       holder_growth_score, whale_activity_score, safety_score, risk_level)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       holder_growth_score, whale_activity_score, safety_score, risk_level, graduated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     token.toLowerCase(),
     now,
@@ -75,7 +80,8 @@ export function recordSnapshot(
     score.components.holderGrowth.value,
     score.components.whaleActivity.value,
     score.components.safety.value,
-    riskLevel
+    riskLevel,
+    metrics.graduated === null ? null : metrics.graduated ? 1 : 0
   );
   return true;
 }
@@ -117,6 +123,23 @@ export function getLatestSnapshot(token: `0x${string}`): TokenSnapshot | null {
   return row ? rowToSnapshot(row) : null;
 }
 
+/** Deletes snapshots older than `cutoffTimestamp` across every token — the
+ *  bounded-storage side of SNAPSHOT_RETENTION_DAYS. Returns the number of
+ *  rows removed. Never touches anything at or after the cutoff. */
+export function pruneSnapshotsOlderThan(cutoffTimestamp: number): number {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM token_snapshots WHERE taken_at < ?`).run(cutoffTimestamp);
+  return Number(result.changes);
+}
+
+/** How many snapshots (across every token) were taken at or after
+ *  `sinceTimestamp` — feeds GET /api/monitoring's "recent activity" view. */
+export function countSnapshotsSince(sinceTimestamp: number): number {
+  const db = getDb();
+  const row = db.prepare(`SELECT COUNT(*) as n FROM token_snapshots WHERE taken_at >= ?`).get(sinceTimestamp) as { n: number };
+  return row.n;
+}
+
 function rowToSnapshot(row: any): TokenSnapshot {
   return {
     takenAt: row.taken_at,
@@ -134,5 +157,6 @@ function rowToSnapshot(row: any): TokenSnapshot {
     whaleActivityScore: row.whale_activity_score,
     safetyScore: row.safety_score,
     riskLevel: row.risk_level ?? null,
+    graduated: row.graduated === null || row.graduated === undefined ? null : !!row.graduated,
   };
 }

@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { useInMemoryDbForTests } from "./db.js";
-import { recordSignal, getRecentSignals, getSignalsForToken, getSignalsForTokenSince, getDistinctTokensWithRecentSignals } from "./signalsStore.js";
+import { recordSignal, getRecentSignals, getSignalsForToken, getSignalsForTokenSince, getDistinctTokensWithRecentSignals, pruneSignalsOlderThan, countSignalsSince } from "./signalsStore.js";
 import type { Signal } from "../signals/types.js";
 
 const TOKEN_A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
@@ -116,4 +116,25 @@ test("getDistinctTokensWithRecentSignals excludes a token whose only signals are
   recordSignal(TOKEN_A, signal({ timestamp: NOW - 7200 })); // 2h old
   const tokens = getDistinctTokensWithRecentSignals(NOW - 1800); // 30 min window
   assert.equal(tokens.length, 0);
+});
+
+test("pruneSignalsOlderThan removes only rows strictly before the cutoff, and reports how many", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 1000 }));
+  recordSignal(TOKEN_A, signal({ timestamp: NOW }));
+  const removed = pruneSignalsOlderThan(NOW - 500);
+  assert.equal(removed, 1);
+  const remaining = getSignalsForToken(TOKEN_A, 10);
+  assert.equal(remaining.length, 1);
+});
+
+test("pruneSignalsOlderThan is a no-op when nothing is old enough", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW }));
+  assert.equal(pruneSignalsOlderThan(NOW - 1000), 0);
+});
+
+test("countSignalsSince counts only rows at or after the cutoff, across every token", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 1000 }));
+  recordSignal(TOKEN_B, signal({ timestamp: NOW }));
+  assert.equal(countSignalsSince(NOW - 500), 1);
+  assert.equal(countSignalsSince(NOW - 2000), 2);
 });

@@ -17,6 +17,9 @@ import { getSnapshotHistory } from "../persistence/snapshots.js";
 import { getRecentSignals, getSignalsForToken } from "../persistence/signalsStore.js";
 import { getRadar } from "../radar/radarService.js";
 import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
+import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
+import { countSnapshotsSince } from "../persistence/snapshots.js";
+import { countSignalsSince } from "../persistence/signalsStore.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -45,6 +48,28 @@ export function createServer() {
   app.get("/api/health", async (_req, res) => {
     const chain = await pingChain();
     res.json({ ok: chain.ok, chain, blockscoutConfigured: config.hasBlockscout(), pollerEnabled: config.enablePoller });
+  });
+
+  // Is FLETCH actually watching the chain right now? See
+  // monitoring/monitoringStore.ts and docs/MONITORING.md. Never exposes
+  // RPC_URL or any other secret — only counts and timestamps.
+  app.get("/api/monitoring", async (_req, res) => {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const health = getMonitoringHealth(now);
+      res.json({
+        enabled: config.enablePoller,
+        discoveryIntervalMs: config.discoveryIntervalMs,
+        pollIntervalMs: config.pollIntervalMs,
+        maxConcurrentTokens: config.maxConcurrentTokens,
+        maxMonitoredTokens: config.maxMonitoredTokens,
+        ...health,
+        snapshotsLastHour: countSnapshotsSince(now - 3600),
+        signalsLastHour: countSignalsSince(now - 3600),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
   });
 
   // Early Signals feed — new tokens, scored.

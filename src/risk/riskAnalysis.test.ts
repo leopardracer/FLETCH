@@ -33,6 +33,7 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     volumePairAssetWindow: null,
     topHolderConcentrationPercent: null,
     whaleMoves: [],
+    graduated: null,
     ...overrides,
   };
 }
@@ -121,4 +122,18 @@ test("abnormal sell pressure compares deltas since the previous snapshot, not th
   const finding = r.findings.find((f) => f.code === "ABNORMAL_SELL_PRESSURE");
   assert.ok(finding);
   assert.match(finding!.evidence, /10 sells vs 2 buys/);
+});
+
+test("liquidity deterioration is suppressed across a phase change, not reported as a collapse", () => {
+  const m = metrics({ liquidityUsd: 5_000, graduated: true });
+  const prevGraduatedSnapshot = { liquidityUsd: 40_000, graduated: false } as any;
+  const r = analyzeRisk(null, m, prevGraduatedSnapshot);
+  assert.equal(r.findings.some((f) => f.code === "LIQUIDITY_DETERIORATION"), false);
+});
+
+test("liquidity deterioration still fires normally when the phase is unchanged", () => {
+  const m = metrics({ liquidityUsd: 5_000, graduated: false });
+  const prevSameGraduated = { liquidityUsd: 40_000, graduated: false } as any;
+  const r = analyzeRisk(null, m, prevSameGraduated);
+  assert.ok(r.findings.some((f) => f.code === "LIQUIDITY_DETERIORATION"));
 });

@@ -83,6 +83,33 @@ export function detectSignals(input: DetectSignalsInput): Signal[] {
     const elapsedMinutes = Math.max(1 / 60, (now - previousSnapshot.takenAt) / 60);
     const trendConfidence = Math.round(Math.min(85, 40 + elapsedMinutes * 2));
 
+    // A token that graduated between the two snapshots being compared has
+    // an incompatible liquidity metric on each side (pre-graduation:
+    // the curve's own balance; post-graduation: not read at all yet, see
+    // chain/liquidity.ts) — comparing them would risk calling a legitimate
+    // phase transition a "liquidity collapse". The null-check above the
+    // liquidity block already prevents this in the common case (post-grad
+    // liquidityUsd is null today), but this guard makes the rule explicit
+    // and keeps it correct if a future provider starts returning a real
+    // post-graduation number.
+    const phaseChanged =
+      previousSnapshot.graduated !== null && metrics.graduated !== null && previousSnapshot.graduated !== metrics.graduated;
+
+    if (phaseChanged) {
+      signals.push(
+        sig(
+          "PHASE_CHANGE",
+          "MEDIUM",
+          trendConfidence,
+          metrics.graduated ? "graduated from the bonding curve to the AMM pool" : "reverted to curve (unexpected)",
+          metrics.graduated
+            ? "This token graduated to its post-curve trading pool since the last check."
+            : "This token's phase changed since the last check.",
+          now
+        )
+      );
+    }
+
     if (metrics.holderCount !== null && previousSnapshot.holderCount !== null && previousSnapshot.holderCount > 0) {
       const delta = metrics.holderCount - previousSnapshot.holderCount;
       const pct = (delta / previousSnapshot.holderCount) * 100;
@@ -111,7 +138,7 @@ export function detectSignals(input: DetectSignalsInput): Signal[] {
       }
     }
 
-    if (metrics.liquidityUsd !== null && previousSnapshot.liquidityUsd !== null && previousSnapshot.liquidityUsd > 0) {
+    if (!phaseChanged && metrics.liquidityUsd !== null && previousSnapshot.liquidityUsd !== null && previousSnapshot.liquidityUsd > 0) {
       const delta = metrics.liquidityUsd - previousSnapshot.liquidityUsd;
       const pct = (delta / previousSnapshot.liquidityUsd) * 100;
       if (Math.abs(pct) >= 10) {

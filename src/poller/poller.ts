@@ -1,54 +1,73 @@
 import { config } from "../core/config.js";
-import { scanRecentLaunches } from "../chain/hunt.js";
-import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
-import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
-import { getSocialSignalForToken } from "../social/social.js";
-import { analyzeAndPersist } from "../signals/signalService.js";
+import { runDiscoveryCycle, runMonitoringCycle, runRetentionCycle } from "../monitoring/monitoringService.js";
 
-const provider = new RpcChainDataProvider();
-let running = false;
+let monitoringRunning = false;
+let discoveryRunning = false;
 
 /**
- * The "real-time" half of the signal engine: without this, snapshots and
- * trend signals only accumulate when someone happens to open a token page.
- * This snapshots the most recently launched tokens on an interval, so
- * holder-growth rate, liquidity change, and activity-acceleration signals
- * exist even with nobody watching.
+ * The continuous side of FLETCH: without this, snapshots/signals only
+ * accumulate when someone happens to open a token page. Two independent
+ * intervals:
  *
- * Deliberately conservative by default (5 min, top 15 tokens) — this runs
- * against whatever RPC_URL is configured, which may be the shared public
- * endpoint; see docs/DATA.md on why that's rate-limited. Tune
- * POLL_INTERVAL_MS / POLL_TOKEN_LIMIT for a dedicated RPC provider, and
- * set ENABLE_POLLER=false to disable entirely.
+ *  - discovery (DISCOVERY_INTERVAL_MS): bounded-window launch scan, adds
+ *    anything new to the durable monitoring queue (monitoring/monitoringStore.ts).
+ *    Also runs the retention prune — cheap enough not to need its own clock.
+ *  - monitoring (POLL_INTERVAL_MS): drains whatever's due from that queue,
+ *    bounded concurrency (MAX_CONCURRENT_TOKENS), prioritizing new launches
+ *    and tokens with recent signals over quiet ones — see
+ *    monitoring/monitoringService.ts's computeNextPriority.
+ *
+ * Both survive process restart because the queue itself is a SQLite table,
+ * not in-memory state. Set ENABLE_POLLER=false to disable entirely.
  */
 export function startPoller(): void {
   if (!config.enablePoller) {
     console.log("Poller disabled (ENABLE_POLLER=false) — signals/snapshots only accumulate from page views.");
     return;
   }
-  console.log(`Poller enabled: snapshotting up to ${config.pollTokenLimit} recent tokens every ${config.pollIntervalMs / 1000}s.`);
-  const tick = () => void runOnce().catch((e) => console.error("Poller tick failed:", e?.message ?? e));
-  tick(); // run once immediately, then on the interval
-  setInterval(tick, config.pollIntervalMs);
+  console.log(
+    `Monitoring enabled: discovery every ${config.discoveryIntervalMs / 1000}s, ` +
+      `checks every ${config.pollIntervalMs / 1000}s (max ${config.maxConcurrentTokens} concurrent, ` +
+      `${config.maxMonitoredTokens} token cap).`
+  );
+
+  const discoveryTick = () =>
+    void runDiscoveryTick().catch((e) => console.error("Discovery tick failed:", e?.message ?? e));
+  const monitoringTick = () =>
+    void runMonitoringTick().catch((e) => console.error("Monitoring tick failed:", e?.message ?? e));
+
+  discoveryTick();
+  monitoringTick();
+  setInterval(discoveryTick, config.discoveryIntervalMs);
+  setInterval(monitoringTick, config.pollIntervalMs);
 }
 
-async function runOnce(): Promise<void> {
-  if (running) return; // don't overlap ticks if one run is still in flight
-  running = true;
+async function runDiscoveryTick(): Promise<void> {
+  if (discoveryRunning) return; // don't overlap ticks if one run is still in flight
+  discoveryRunning = true;
   try {
-    const launches = await scanRecentLaunches();
-    const targets = launches.slice(0, config.pollTokenLimit);
-    for (const launch of targets) {
-      try {
-        const metrics = await provider.getTokenMetrics(launch.token);
-        const smartMoney = await getSmartMoneyForToken(launch.token);
-        const social = await getSocialSignalForToken(launch.token);
-        analyzeAndPersist(launch.token, launch, metrics, smartMoney, social);
-      } catch (e: any) {
-        console.warn(`Poller: skipped ${launch.token} — ${e?.message ?? e}`);
-      }
+    const result = await runDiscoveryCycle();
+    if (result.discovered > 0 || result.skippedCapacity > 0) {
+      console.log(`Discovery: scanned ${result.scanned}, added ${result.discovered} new, skipped ${result.skippedCapacity} (queue at capacity).`);
+    }
+    const retention = runRetentionCycle();
+    if (retention.snapshotsRemoved > 0 || retention.signalsRemoved > 0) {
+      console.log(`Retention: pruned ${retention.snapshotsRemoved} old snapshot(s), ${retention.signalsRemoved} old signal(s).`);
     }
   } finally {
-    running = false;
+    discoveryRunning = false;
+  }
+}
+
+async function runMonitoringTick(): Promise<void> {
+  if (monitoringRunning) return;
+  monitoringRunning = true;
+  try {
+    const result = await runMonitoringCycle();
+    if (result.checked > 0) {
+      console.log(`Monitoring: checked ${result.checked} (${result.succeeded} ok, ${result.failed} failed), peak concurrency ${result.maxConcurrencyObserved}.`);
+    }
+  } finally {
+    monitoringRunning = false;
   }
 }

@@ -8,6 +8,7 @@ const NAV = [
   { id: "tokens", label: "Tokens" },
   { id: "wallets", label: "Wallets" },
   { id: "risk", label: "Risk" },
+  { id: "monitoring", label: "Monitoring" },
   { id: "docs", label: "Docs" },
 ];
 
@@ -380,13 +381,67 @@ async function renderRiskView() {
   }
 }
 
+async function renderMonitoring() {
+  renderNav("monitoring");
+  app.innerHTML = `
+    <div class="section-head">
+      <div><h1>Monitoring</h1><p>Is FLETCH actually watching the chain right now? Real counts from the monitoring queue — not a sample, not an estimate.</p></div>
+    </div>
+    <div id="monitoring-body">${loadingLine()}</div>
+  `;
+  const body = document.getElementById("monitoring-body");
+  try {
+    const m = await getJSON("/api/monitoring");
+    const statusLabel = m.enabled ? "WATCHING" : "DISABLED";
+    const statusClass = m.enabled ? "sev-LOW" : "sev-HIGH";
+
+    body.innerHTML = `
+      <div class="panel-block">
+        <div class="mini-row"><span><span class="why-dot ${statusClass}" style="margin-right:8px"></span>Watcher status</span><span>${statusLabel}</span></div>
+        <div class="mini-row"><span>Discovery interval</span><span>${Math.round(m.discoveryIntervalMs / 1000)}s</span></div>
+        <div class="mini-row"><span>Check interval</span><span>${Math.round(m.pollIntervalMs / 1000)}s</span></div>
+        <div class="mini-row"><span>Max concurrent checks</span><span>${m.maxConcurrentTokens}</span></div>
+        <div class="mini-row"><span>Max monitored tokens</span><span>${m.maxMonitoredTokens}</span></div>
+      </div>
+
+      <div class="grid">
+        <div class="card"><div class="k">Monitored</div><div class="v">${m.totalMonitored}</div><div class="sub">${m.activeCount} active</div></div>
+        <div class="card"><div class="k">Due right now</div><div class="v">${m.dueNowCount}</div><div class="sub">queue backlog</div></div>
+        <div class="card"><div class="k">Failed</div><div class="v">${m.failedCount}</div><div class="sub">gave up after repeated errors</div></div>
+      </div>
+
+      <div class="panel-block">
+        <h2>Last hour</h2>
+        <div class="mini-row"><span>Snapshots collected</span><span>${m.snapshotsLastHour}</span></div>
+        <div class="mini-row"><span>Signals generated</span><span>${m.signalsLastHour}</span></div>
+        <div class="mini-row"><span>Last successful check</span><span>${m.lastSuccessfulCheckAt ? fmtTime(m.lastSuccessfulCheckAt) : "—"}</span></div>
+        <div class="mini-row"><span>Next scheduled check</span><span>${m.nextScheduledCheckAt ? fmtTime(m.nextScheduledCheckAt) : "—"}</span></div>
+      </div>
+
+      ${
+        m.totalMonitored === 0
+          ? stateBlock(
+              "pending",
+              "NOTHING MONITORED YET",
+              "The queue fills in as launches are discovered — set RPC_URL and ENABLE_POLLER=true, or open a token page to check one manually. See docs/MONITORING.md."
+            )
+          : ""
+      }
+    `;
+  } catch (e) {
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD MONITORING STATUS", e.message);
+  }
+}
+
 function renderDocs() {
   renderNav("docs");
   const docs = [
     { file: "ARCHITECTURE.md", desc: "System design and the data-provider abstraction." },
     { file: "SCORING.md", desc: "Exactly how the FLETCH Score is computed, component by component." },
     { file: "SIGNALS.md", desc: "What counts as a signal, severity and confidence rules." },
+    { file: "RADAR.md", desc: "The Radar formula — every constant spelled out." },
     { file: "RISK.md", desc: "Every risk finding, its threshold, and its evidence." },
+    { file: "MONITORING.md", desc: "How continuous discovery and monitoring actually work." },
     { file: "DATA.md", desc: "Where every metric comes from — and what's still unavailable." },
     { file: "DEVELOPMENT.md", desc: "Setup, environment variables, and the test suite." },
   ];
@@ -680,6 +735,8 @@ function route() {
     renderWalletsView();
   } else if (hash === "#/risk") {
     renderRiskView();
+  } else if (hash === "#/monitoring") {
+    renderMonitoring();
   } else if (hash === "#/docs") {
     renderDocs();
   } else {

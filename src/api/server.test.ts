@@ -76,6 +76,19 @@ test("GET /api/radar honors a custom window query param", async () => {
   assert.equal(body.windowSeconds, 600);
 });
 
+test("GET /api/monitoring responds 200 with real counts on a fresh database, and never exposes RPC_URL or other secrets", async () => {
+  const res = await fetch(`${baseUrl}/api/monitoring`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.totalMonitored, 0);
+  assert.equal(body.activeCount, 0);
+  assert.equal(body.dueNowCount, 0);
+  assert.equal(typeof body.enabled, "boolean");
+  assert.equal("rpcUrl" in body, false);
+  assert.equal("RPC_URL" in body, false);
+  assert.equal("blockscoutApiKey" in body, false);
+});
+
 test("GET /api/tokens fails gracefully (500 with a clear reason) when RPC isn't configured — never a raw crash or hang", async () => {
   const res = await fetch(`${baseUrl}/api/tokens`);
   assert.equal(res.status, 500);

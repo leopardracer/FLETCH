@@ -40,6 +40,11 @@ export interface TokenMetrics {
   topHolderConcentrationPercent: number | null; // % held by top 10 non-protocol accumulators
   /** Transfers at/above the configured whale threshold, in the same scan window as holderCount. Real data — see chain/holders.ts. */
   whaleMoves: WhaleMove[];
+  /** null = no launch record found (unknown phase), not "not graduated". Was
+   *  already computed by chain/liquidity.ts's readCurveState but silently
+   *  dropped before reaching here — now threaded through so snapshots and
+   *  signals can be phase-aware (see docs/MONITORING.md). */
+  graduated: boolean | null;
 }
 
 export interface Transfer {

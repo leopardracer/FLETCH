@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { useInMemoryDbForTests } from "./db.js";
-import { recordSnapshot, getPreviousSnapshot, getSnapshotHistory, getLatestSnapshot } from "./snapshots.js";
+import { recordSnapshot, getPreviousSnapshot, getSnapshotHistory, getLatestSnapshot, pruneSnapshotsOlderThan, countSnapshotsSince } from "./snapshots.js";
 import type { TokenMetrics } from "../data/types.js";
 import type { FletchScore } from "../scoring/fletchScore.js";
 
@@ -27,6 +27,7 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     volumePairAssetWindow: 3,
     topHolderConcentrationPercent: 20,
     whaleMoves: [],
+    graduated: null,
     ...overrides,
   };
 }
@@ -127,4 +128,34 @@ test("riskLevel round-trips exactly as recorded — this is what Meme Radar read
   recordSnapshot(TOKEN, metrics(), score(), "CRITICAL", NOW);
   const latest = getLatestSnapshot(TOKEN);
   assert.equal(latest?.riskLevel, "CRITICAL");
+});
+
+test("graduated round-trips exactly: true, false, and null are all distinct and preserved", () => {
+  recordSnapshot(TOKEN, metrics({ holderCount: 1 }), score(), "LOW", NOW);
+  assert.equal(getLatestSnapshot(TOKEN)?.graduated, null); // metrics() default has no override
+
+  recordSnapshot(OTHER_TOKEN, metrics({ holderCount: 1, graduated: true }), score(), "LOW", NOW);
+  assert.equal(getLatestSnapshot(OTHER_TOKEN)?.graduated, true);
+});
+
+test("pruneSnapshotsOlderThan removes only rows strictly before the cutoff, and reports how many", () => {
+  recordSnapshot(TOKEN, metrics({ holderCount: 1 }), score(), "LOW", NOW - 1000);
+  recordSnapshot(TOKEN, metrics({ holderCount: 2 }), score(), "LOW", NOW); // default rate limit means this needs a big enough gap
+  const removed = pruneSnapshotsOlderThan(NOW - 500);
+  assert.equal(removed, 1);
+  const remaining = getSnapshotHistory(TOKEN, 10);
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].takenAt, NOW);
+});
+
+test("pruneSnapshotsOlderThan is a no-op (0 removed) when nothing is old enough", () => {
+  recordSnapshot(TOKEN, metrics({ holderCount: 1 }), score(), "LOW", NOW);
+  assert.equal(pruneSnapshotsOlderThan(NOW - 1000), 0);
+});
+
+test("countSnapshotsSince counts only rows at or after the cutoff, across every token", () => {
+  recordSnapshot(TOKEN, metrics({ holderCount: 1 }), score(), "LOW", NOW - 1000);
+  recordSnapshot(OTHER_TOKEN, metrics({ holderCount: 2 }), score(), "LOW", NOW);
+  assert.equal(countSnapshotsSince(NOW - 500), 1);
+  assert.equal(countSnapshotsSince(NOW - 2000), 2);
 });

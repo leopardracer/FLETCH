@@ -33,7 +33,8 @@ function createSchema(db: DatabaseSync): void {
       holder_growth_score INTEGER,
       whale_activity_score INTEGER,
       safety_score INTEGER,
-      risk_level TEXT
+      risk_level TEXT,
+      graduated INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_token_time ON token_snapshots(token, taken_at);
 
@@ -61,6 +62,31 @@ function createSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_wallet_activity_wallet ON wallet_activity(wallet, taken_at);
     CREATE INDEX IF NOT EXISTS idx_wallet_activity_token ON wallet_activity(token, taken_at);
+
+    -- Meme Radar candidates come from the signals table; this table is the
+    -- durable monitoring queue itself — which tokens FLETCH is watching,
+    -- and enough state about each to schedule the next check without
+    -- re-deriving everything from a fresh chain scan every cycle. Survives
+    -- process restart because it's just another SQLite table.
+    -- launch_json caches the launch-moment facts (curve address, dev-buy
+    -- data, etc.) captured once at discovery — these never change, so
+    -- every later check reuses them instead of re-deriving them from raw
+    -- chain logs on every single cycle like the original poller did.
+    CREATE TABLE IF NOT EXISTS monitored_tokens (
+      token TEXT PRIMARY KEY,
+      first_detected_at INTEGER NOT NULL,
+      last_checked_at INTEGER,
+      last_success_at INTEGER,
+      next_check_at INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      phase TEXT,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      priority TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      launch_json TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_monitored_status_next_check ON monitored_tokens(status, next_check_at);
   `);
 }
 
