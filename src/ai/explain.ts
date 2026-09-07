@@ -1,6 +1,5 @@
-import type { TokenMetrics } from "../data/types.js";
+import type { Signal, SignalSeverity } from "../signals/types.js";
 import type { RiskReport } from "../risk/riskAnalysis.js";
-import type { FletchScore } from "../scoring/fletchScore.js";
 
 export interface WhyIsItMoving {
   bullets: string[];
@@ -8,47 +7,37 @@ export interface WhyIsItMoving {
   insufficientData: boolean;
 }
 
+/** Risk-derived signal types are shown in the Risk section instead — avoids saying the same finding twice. */
+const RISK_SIGNAL_TYPES = new Set(["DEPLOYER_RISK", "BUNDLED_WALLETS", "SERIAL_DEPLOYER", "HOLDER_CONCENTRATION", "THIN_LIQUIDITY"]);
+
+const SEVERITY_RANK: Record<SignalSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
 /**
- * Deliberately NOT a free-form LLM call. Every bullet here is a direct,
- * templated rendering of a structured number FLETCH already computed —
- * same philosophy as GTTM's core/signals.ts ("a small set of clearly
- * stated, deterministic rules... nothing that pretends to be smarter than
- * it is"). This is what the brief means by "AI must not invent market
- * data": the safest way to guarantee that is to never let free text
- * generation touch the numbers at all.
+ * Deliberately NOT a free-form LLM call. Every bullet is a direct render
+ * of a `Signal` the signal engine already detected (src/signals/signalEngine.ts)
+ * — `signal.explanation` plus its `evidence`, nothing added. This is the
+ * safest way to guarantee the brief's "must NEVER hallucinate" rule: never
+ * let generated text see raw numbers and write from scratch, only ever
+ * let it re-render numbers that were already computed deterministically.
  *
  * If you want this phrased more naturally later, the safe pattern is:
- * generate these bullets first, then pass ONLY this array to an LLM with
- * an instruction to rephrase without adding facts — never let the model
- * see raw metrics and write from scratch.
+ * pass ONLY this bullets array to an LLM with an instruction to rephrase
+ * without adding facts — never let the model see raw metrics directly.
  */
-export function explainWhyItsMoving(metrics: TokenMetrics, risk: RiskReport, score: FletchScore): WhyIsItMoving {
-  const bullets: string[] = [];
+export function explainWhyItsMoving(signals: Signal[], risk: RiskReport): WhyIsItMoving {
+  const movementSignals = signals
+    .filter((s) => !RISK_SIGNAL_TYPES.has(s.type))
+    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
 
-  if (metrics.buyCountWindow + metrics.sellCountWindow > 0) {
-    bullets.push(`${metrics.buyCountWindow} buys vs ${metrics.sellCountWindow} sells since launch`);
-  }
-  if (metrics.holderCount !== null) {
-    bullets.push(`${metrics.holderCount} holders tracked${metrics.holderCountIsLifetime ? " (lifetime count)" : " (in scan window)"}`);
-  }
-  if (metrics.liquidityUsd !== null) {
-    bullets.push(`liquidity currently $${metrics.liquidityUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
-  } else if (metrics.liquidityUsdUnavailableReason) {
-    bullets.push(`liquidity in USD: unavailable (${metrics.liquidityUsdUnavailableReason})`);
-  }
-  if (score.components.smartMoney.value === null) {
-    bullets.push(`smart-money activity: unavailable (${score.components.smartMoney.reason})`);
-  }
-  if (score.components.social.value === null) {
-    bullets.push(`social momentum: unavailable (${score.components.social.reason})`);
+  const bullets = movementSignals.map((s) => `${s.explanation} (${s.evidence})`);
+  if (bullets.length === 0) {
+    bullets.push("Unavailable — not enough signal data yet to explain recent movement.");
   }
 
-  const risks = risk.findings
-    .filter((f) => f.level !== "LOW")
-    .map((f) => `[${f.level}] ${f.evidence}`);
+  const risks = risk.findings.filter((f) => f.level !== "LOW").map((f) => `[${f.level}] ${f.evidence}`);
   if (risks.length === 0) {
     risks.push("[LOW] " + (risk.findings[0]?.evidence ?? "no elevated risk findings"));
   }
 
-  return { bullets, risks, insufficientData: bullets.length === 0 };
+  return { bullets, risks, insufficientData: movementSignals.length === 0 };
 }

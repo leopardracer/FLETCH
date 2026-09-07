@@ -103,6 +103,44 @@ a { color: inherit; }
 .mini-row:last-child { border-bottom: none; }
 .mini-row .sym { font-weight: 600; }
 
+.signal-row {
+  display: grid;
+  grid-template-columns: 56px 100px 180px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  cursor: pointer;
+}
+.signal-row:last-child { border-bottom: none; }
+.signal-row:hover { background: var(--panel-raised); }
+.signal-time { font-family: var(--mono); color: var(--ink-faint); font-size: 12px; }
+.signal-token { font-weight: 600; }
+.signal-type-label { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-transform: lowercase; }
+.signal-evidence { color: var(--ink-dim); font-size: 12.5px; }
+
+.avail-grid { display: flex; flex-direction: column; gap: 2px; }
+.avail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  text-transform: capitalize;
+}
+.avail-row:last-child { border-bottom: none; }
+.avail-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-transform: none;
+}
+.avail-badge.avail-real { color: var(--green); background: rgba(111,174,102,0.12); }
+.avail-badge.avail-key { color: var(--amber); background: rgba(217,164,65,0.12); }
+.avail-badge.avail-na { color: var(--ink-faint); background: rgba(255,255,255,0.04); }
+
 main {
   max-width: 1180px;
   margin: 0 auto;

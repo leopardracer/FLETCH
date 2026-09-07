@@ -3,17 +3,22 @@ const app = document.getElementById("app");
 
 const NAV = [
   { id: "overview", label: "Overview" },
-  { id: "signals", label: "Early Signals" },
+  { id: "live-signals", label: "Signals" },
+  { id: "tokens", label: "Tokens" },
   { id: "wallets", label: "Wallets" },
   { id: "risk", label: "Risk" },
   { id: "docs", label: "Docs" },
 ];
 
+function navHref(id) {
+  return id === "tokens" ? "#/" : `#/${id}`;
+}
+
 function renderNav(active) {
   const bar = document.getElementById("navbar");
   if (!bar) return;
   bar.innerHTML = NAV.map(
-    (n) => `<a class="navlink${n.id === active ? " active" : ""}" onclick="location.hash='#/${n.id === "signals" ? "" : n.id}'">${n.label}</a>`
+    (n) => `<a class="navlink${n.id === active ? " active" : ""}" onclick="location.hash='${navHref(n.id)}'">${n.label}</a>`
   ).join("");
 }
 
@@ -26,6 +31,53 @@ async function getJSON(path) {
 function fmtAddr(a) {
   if (!a) return "—";
   return a.slice(0, 6) + "…" + a.slice(-4);
+}
+
+function fmtTime(unixSeconds) {
+  const d = new Date(unixSeconds * 1000);
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function severityChip(level) {
+  if (!level) return `<span class="chip na">N/A</span>`;
+  return `<span class="chip ${level}">${level}</span>`;
+}
+
+function availabilityBadge(state) {
+  const cls = state === "REAL" ? "avail-real" : state === "REQUIRES_API_KEY" ? "avail-key" : "avail-na";
+  const label = state === "REQUIRES_API_KEY" ? "REQUIRES API KEY" : state === "NOT_YET_IMPLEMENTED" ? "NOT YET IMPLEMENTED" : state;
+  return `<span class="avail-badge ${cls}">${label}</span>`;
+}
+
+async function renderLiveSignals() {
+  renderNav("live-signals");
+  app.innerHTML = `
+    <div class="section-head">
+      <div><h1>Signals</h1><p>Events worth attention across every recently launched token — sorted by severity, then recency. Not a token list.</p></div>
+    </div>
+    <div id="live-signals-body" class="empty">loading…</div>
+  `;
+  const body = document.getElementById("live-signals-body");
+  try {
+    const data = await getJSON("/api/signals?limit=80");
+    if (!data.signals || data.signals.length === 0) {
+      body.innerHTML = `<div class="empty">No signals recorded yet. Signals accumulate as tokens are viewed or the background poller runs — see docs/DEVELOPMENT.md.</div>`;
+      return;
+    }
+    body.outerHTML = `<div id="live-signals-body">${data.signals
+      .map(
+        (s) => `
+        <div class="signal-row" onclick="location.hash='#/token/${s.token}'">
+          <div class="signal-time">${fmtTime(s.timestamp)}</div>
+          <div class="signal-token">${s.symbol ? "$" + s.symbol : fmtAddr(s.token)}</div>
+          <div class="signal-type">${severityChip(s.severity)} <span class="signal-type-label">${s.type.replace(/_/g, " ")}</span></div>
+          <div class="signal-evidence">${s.evidence}</div>
+        </div>`
+      )
+      .join("")}</div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="error">Couldn't load signals — ${e.message}</div>`;
+  }
 }
 
 function scoreBadge(score) {
@@ -65,7 +117,7 @@ async function renderOverview() {
   renderNav("overview");
   app.innerHTML = `
     <div class="section-head">
-      <div><h1>Overview</h1><p>Everything below comes from the same live feed as Early Signals — filtered differently.</p></div>
+      <div><h1>Overview</h1><p>Everything below comes from the same live feed as Tokens and Signals — filtered differently.</p></div>
     </div>
     <div class="overview-grid" id="overview-body">
       <div class="panel-block"><h2>Moving now</h2><div class="empty">loading…</div></div>
@@ -73,10 +125,14 @@ async function renderOverview() {
     </div>
   `;
   try {
-    const data = await getJSON("/api/tokens");
+    const [data, signalsData] = await Promise.all([
+      getJSON("/api/tokens"),
+      getJSON("/api/signals?limit=6").catch(() => ({ signals: [] })),
+    ]);
     const tokens = data.tokens || [];
     const movingNow = [...tokens].sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1)).slice(0, 8);
     const alerts = tokens.filter((t) => t.riskLevel === "HIGH" || t.riskLevel === "CRITICAL").slice(0, 8);
+    const recentSignals = signalsData.signals || [];
 
     document.getElementById("overview-body").innerHTML = `
       <div class="panel-block">
@@ -107,6 +163,21 @@ async function renderOverview() {
                 )
                 .join("")
             : `<div class="empty">No elevated risk findings in the current scan window.</div>`
+        }
+      </div>
+      <div class="panel-block">
+        <h2>Recent signals</h2>
+        ${
+          recentSignals.length
+            ? recentSignals
+                .map(
+                  (sg) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/token/${sg.token}'">
+                    <span class="sym">${sg.symbol ? "$" + sg.symbol : fmtAddr(sg.token)}</span>
+                    <span>${severityChip(sg.severity)}</span>
+                  </div>`
+                )
+                .join("")
+            : `<div class="empty">No signals recorded yet — see the Signals tab.</div>`
         }
       </div>
       <div class="panel-block">
@@ -232,12 +303,12 @@ function renderDocs() {
 }
 
 async function renderFeed() {
-  renderNav("signals");
+  renderNav("tokens");
   app.innerHTML = `
     <div class="section-head">
       <div>
-        <h1>Early Signals</h1>
-        <p>New Pons V2 launches on Robinhood Chain, ranked by FLETCH Score — not market cap.</p>
+        <h1>Tokens</h1>
+        <p>New Pons V2 launches on Robinhood Chain, ranked by FLETCH Score — not market cap. For the live event stream, see the Signals tab.</p>
       </div>
     </div>
     <div id="feed-body" class="empty">loading…</div>
@@ -284,13 +355,18 @@ async function renderToken(address) {
   renderNav(null);
   app.innerHTML = `<a class="back" onclick="location.hash='#/'">&larr; back to feed</a><div class="empty">loading ${fmtAddr(address)}…</div>`;
   try {
-    const [d, walletsRes] = await Promise.all([
+    const [d, walletsRes, historyRes, signalsRes] = await Promise.all([
       getJSON(`/api/tokens/${address}`),
       getJSON(`/api/tokens/${address}/wallets`).catch(() => ({ wallets: [] })),
+      getJSON(`/api/tokens/${address}/history`).catch(() => ({ snapshots: [] })),
+      getJSON(`/api/tokens/${address}/signals`).catch(() => ({ signals: [] })),
     ]);
     const m = d.metrics;
     const s = d.fletchScore;
     const wallets = (walletsRes.wallets || []).slice(0, 10);
+    const history = (historyRes.snapshots || []).slice(0, 20);
+    const signals = (signalsRes.signals || []).slice(0, 25);
+    const avail = d.dataAvailability || {};
 
     app.innerHTML = `
       <a class="back" onclick="location.hash='#/'">&larr; back to feed</a>
@@ -332,7 +408,15 @@ async function renderToken(address) {
           ${componentBlock("Social", s.components.social)}
           ${componentBlock("Liquidity", s.components.liquidity)}
           ${componentBlock("Holder Growth", s.components.holderGrowth)}
+          ${componentBlock("Whale Activity", s.components.whaleActivity)}
           ${componentBlock("Safety", s.components.safety)}
+        </div>
+      </div>
+
+      <div class="panel-block">
+        <h2>Data availability</h2>
+        <div class="avail-grid">
+          ${Object.entries(avail).map(([k, v]) => `<div class="avail-row"><span>${k.replace(/([A-Z])/g, " $1").trim()}</span>${availabilityBadge(v)}</div>`).join("")}
         </div>
       </div>
 
@@ -344,6 +428,46 @@ async function renderToken(address) {
       <div class="panel-block">
         <h2>Risk — ${d.risk.level}</h2>
         <ul>${d.whyIsItMoving.risks.map((r) => `<li>${r}</li>`).join("")}</ul>
+      </div>
+
+      <div class="panel-block">
+        <h2>Signal timeline</h2>
+        ${
+          signals.length
+            ? `<div>${signals
+                .map(
+                  (sig) => `<div class="signal-row" style="cursor:default">
+                    <div class="signal-time">${fmtTime(sig.timestamp)}</div>
+                    <div class="signal-type">${severityChip(sig.severity)} <span class="signal-type-label">${sig.type.replace(/_/g, " ")}</span></div>
+                    <div class="signal-evidence">${sig.evidence}</div>
+                  </div>`
+                )
+                .join("")}</div>`
+            : `<div class="empty">No signals recorded yet for this token — they accumulate as this page is viewed or the background poller runs.</div>`
+        }
+      </div>
+
+      <div class="panel-block">
+        <h2>Score history</h2>
+        ${
+          history.length > 1
+            ? `<table class="feed">
+                <thead><tr><th>Time</th><th>FLETCH Score</th><th>Holders</th><th>Liquidity</th></tr></thead>
+                <tbody>
+                  ${history
+                    .map(
+                      (h) => `<tr style="cursor:default">
+                        <td class="addr">${fmtTime(h.takenAt)}</td>
+                        <td>${h.fletchScore ?? "—"}</td>
+                        <td>${h.holderCount ?? "—"}</td>
+                        <td>${h.liquidityUsd !== null && h.liquidityUsd !== undefined ? "$" + h.liquidityUsd.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
+                      </tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>`
+            : `<div class="empty">Not enough history yet — score history builds up as this token is checked over time (page views or the background poller).</div>`
+        }
       </div>
 
       <div class="panel-block">
@@ -373,7 +497,7 @@ async function renderToken(address) {
                 <tbody>
                   ${wallets
                     .map(
-                      (w) => `<tr>
+                      (w) => `<tr onclick="location.hash='#/wallet/${w.wallet}'">
                         <td class="addr">${fmtAddr(w.wallet)}</td>
                         <td>${w.tokensTraded ?? "—"}</td>
                         <td style="color:var(--ink-faint);font-size:12px">${w.note || ""}</td>
@@ -391,13 +515,56 @@ async function renderToken(address) {
   }
 }
 
+async function renderWalletDetail(address) {
+  renderNav(null);
+  app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a><div class="empty">loading ${fmtAddr(address)}…</div>`;
+  try {
+    const w = await getJSON(`/api/wallets/${address}`);
+    const metricRows = Object.entries(w.metrics)
+      .map(([k, v]) => `<div class="avail-row"><span>${k.replace(/([A-Z])/g, " $1").trim()}</span>${availabilityBadge(v.availability)}</div>`)
+      .join("");
+    app.innerHTML = `
+      <a class="back" onclick="history.back()">&larr; back</a>
+      <div class="detail-head">
+        <div>
+          <h1>Wallet</h1>
+          <div class="addr">${w.wallet}</div>
+        </div>
+      </div>
+      <div class="panel-block">
+        <h2>Recorded activity</h2>
+        ${
+          w.profile
+            ? `<div class="mini-row"><span>Tokens touched</span><span>${w.profile.tokensTouched.length}</span></div>
+               <div class="mini-row"><span>First seen</span><span>${fmtTime(w.profile.firstSeenAt)}</span></div>
+               <div class="mini-row"><span>Last seen</span><span>${fmtTime(w.profile.lastSeenAt)}</span></div>
+               <div class="mini-row"><span>Records</span><span>${w.profile.totalRecords}</span></div>`
+            : `<div class="empty">No recorded activity for this wallet yet.</div>`
+        }
+      </div>
+      <div class="panel-block">
+        <h2>Wallet intelligence metrics</h2>
+        <p style="color:var(--ink-faint);font-size:12.5px;margin-top:0">No fabricated "wallet score" — each metric below is either real or explicitly not yet implemented, with the exact missing data named.</p>
+        <div class="avail-grid">${metricRows}</div>
+      </div>
+    `;
+  } catch (e) {
+    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a><div class="error">Couldn't load this wallet — ${e.message}</div>`;
+  }
+}
+
 function route() {
   const hash = location.hash || "#/";
   const tokenMatch = hash.match(/^#\/token\/(0x[a-fA-F0-9]{40})$/);
+  const walletMatch = hash.match(/^#\/wallet\/(0x[a-fA-F0-9]{40})$/);
   if (tokenMatch) {
     renderToken(tokenMatch[1]);
+  } else if (walletMatch) {
+    renderWalletDetail(walletMatch[1]);
   } else if (hash === "#/overview") {
     renderOverview();
+  } else if (hash === "#/live-signals") {
+    renderLiveSignals();
   } else if (hash === "#/wallets") {
     renderWalletsView();
   } else if (hash === "#/risk") {

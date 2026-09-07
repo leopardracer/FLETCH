@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="tests" src="https://img.shields.io/badge/tests-19%20passing-D9670C?style=flat-square&labelColor=14100C">
+  <img alt="tests" src="https://img.shields.io/badge/tests-38%20passing-D9670C?style=flat-square&labelColor=14100C">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A520-F2E9DD?style=flat-square&labelColor=14100C">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F2E9DD?style=flat-square&labelColor=14100C">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F2E9DD?style=flat-square&labelColor=14100C">
@@ -59,7 +59,11 @@ TOKEN       AGE     DEV BUY   RISK      FLETCH SCORE
 ```
 *(shape shown — see [Live Data](#live-data) below; this repo doesn't ship fabricated rows to fill that table in.)*
 
-Details on what counts as a signal today, and what the brief describes that isn't built yet (acceleration signals need a snapshot history this MVP doesn't have): [docs/SIGNALS.md](./docs/SIGNALS.md).
+Details on what counts as a signal today: [docs/SIGNALS.md](./docs/SIGNALS.md).
+
+## Signal Engine
+
+Beyond the discovery feed, FLETCH runs a real signal engine (`src/signals/signalEngine.ts`) that detects buy/sell pressure, whale moves classified against the token's own curve address, and — once snapshot history exists — holder growth, liquidity change, price movement, and activity acceleration. Every signal has a type, severity, confidence, exact evidence, and a plain explanation; trend signals never fire without a real previous snapshot to compare against. History accumulates from a small SQLite persistence layer (`node:sqlite`, no new runtime dependency) written to on every token-page read and, optionally, by a background poller. The dashboard's **Signals** tab shows the live, chain-wide feed — events worth attention, not a token list. Full breakdown: [docs/SIGNALS.md](./docs/SIGNALS.md).
 
 ## FLETCH Score
 
@@ -72,8 +76,9 @@ $ARROWCAT                                    FLETCH SCORE   91
 
   MOMENTUM       96      buy pressure + activity level, since launch
   SMART MONEY    UNAVAILABLE   no cross-token wallet history store yet
-  HOLDERS        91      holder count (lifetime, from launch block)
+  HOLDERS        91      +42% since the last check (real, once history exists)
   LIQUIDITY      82      curve balance, converted to USD
+  WHALE ACTIVITY 78      3 whale buys from the curve, no sells
   SAFETY         71      inverse of the risk report
 ```
 
@@ -107,9 +112,9 @@ Not implemented as real intelligence yet — and the dashboard says so, in `src/
 
 ## Architecture
 
-`chain/` (raw Robinhood Chain + Pons V2 reads) → `data/` (the `ChainDataProvider` abstraction) → `risk/` + `scoring/` + `ai/` (pure, unit-tested logic) → `api/` (Express) → `web/` (dashboard).
+`chain/` (raw Robinhood Chain + Pons V2 reads) → `data/` (the `ChainDataProvider` abstraction) → `persistence/` (SQLite snapshot/signal history) + `risk/` + `signals/` + `scoring/` + `ai/` (pure, unit-tested logic where possible) → `api/` (Express) → `web/` (dashboard).
 
-The `ChainDataProvider` interface is the seam that lets a Bitquery-backed provider (unlocks post-graduation Uniswap v4 pricing, decoded trade history, wallet tracking) get swapped in later without touching scoring, risk, or the API. Full writeup: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+The `ChainDataProvider` interface is the seam that lets a Bitquery-backed provider (unlocks post-graduation Uniswap v4 pricing, decoded trade history, wallet tracking) get swapped in later without touching scoring, risk, or the API. The signal engine (`signals/signalEngine.ts`) is a pure function over metrics + risk + an optional previous snapshot — no chain calls, no DB access, fully unit-tested. Full writeup: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Quick Start
 
@@ -131,9 +136,9 @@ npm run dev
 
 FLETCH reads Robinhood Chain directly — no seed data, no fixtures shipped in the repo. What's real today versus what's `unavailable` and why: [docs/DATA.md](./docs/DATA.md). Short version:
 
-**Real:** new-token discovery, launch risk signals, holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Safety), risk levels with evidence.
+**Real:** new-token discovery, launch risk signals, holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Whale Activity/Safety), risk levels with evidence, persisted snapshot + signal history, trend-based signals and risk findings once history exists.
 
-**Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, Smart Money wallet history, Social signal, holder-growth *rate* (vs. absolute count).
+**Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, Smart Money win-rate/PnL (the participation record is real; PnL isn't — see [docs/DATA.md](./docs/DATA.md#smart-money)), Social signal.
 
 ## Demo
 
@@ -147,18 +152,19 @@ Setup, environment variables, test suite, and the current next-steps list: [docs
 npm test
 ```
 
-19 tests, all against pure scoring/risk/explanation logic — no network required. `npm run build` type-checks and compiles; `npm run dev` does both and starts the server.
+38 tests, all against pure scoring/risk/signal-engine/explanation logic — no network required. `npm run build` type-checks and compiles; `npm run dev` does both and starts the server.
 
 ## Roadmap
 
 Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-steps):
 
 1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
-2. Persistence layer (snapshots) → real holder-growth rate and acceleration signals
+2. Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot
 3. Evaluate Bitquery for Uniswap v4 pricing and decoded trade history — a provider swap, not a rewrite
-4. Decide on a social data source, or keep it honestly unavailable
-5. Wallet-clustering detection off existing transfer data
-6. Batch per-launch RPC calls in the feed endpoint via multicall
+4. Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate
+5. Decide on a social data source, or keep it honestly unavailable
+6. Wallet-clustering detection off existing transfer data
+7. Batch per-launch RPC calls in the feed endpoint via multicall
 
 ## Built on
 

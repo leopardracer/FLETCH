@@ -1,69 +1,82 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { explainWhyItsMoving } from "./explain.js";
-import { computeFletchScore } from "../scoring/fletchScore.js";
-import type { TokenMetrics } from "../data/types.js";
+import type { Signal } from "../signals/types.js";
 import type { RiskReport } from "../risk/riskAnalysis.js";
 
-const NO_SMART_MONEY = { available: false as const, reason: "no wallet history store yet" };
-const NO_SOCIAL = { available: false as const, reason: "no social source wired up" };
+const NOW = 1_700_000_000;
 
-function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
+function signal(overrides: Partial<Signal> = {}): Signal {
   return {
-    priceInPair: null,
-    liquidityPairAsset: null,
-    liquidityUsd: null,
-    holderCount: null,
-    holderCountIsLifetime: false,
-    buyCountWindow: 0,
-    sellCountWindow: 0,
-    volumePairAssetWindow: null,
-    topHolderConcentrationPercent: null,
+    type: "BUY_PRESSURE",
+    severity: "MEDIUM",
+    confidence: 70,
+    evidence: "12 buys vs 3 sells",
+    explanation: "Buy activity is outweighing sell activity.",
+    timestamp: NOW,
     ...overrides,
   };
 }
 
-const CLEAN_RISK: RiskReport = { level: "LOW", findings: [{ level: "LOW", evidence: "no red flags found" }], safetyScore: 100 };
+const CLEAN_RISK: RiskReport = { level: "LOW", findings: [{ level: "LOW", code: "CLEAN", evidence: "no red flags found" }], safetyScore: 100 };
 
-test("every bullet traces to a real number that was passed in — no bullet appears out of nowhere", () => {
-  const m = metrics({ buyCountWindow: 12, sellCountWindow: 3, holderCount: 88, liquidityUsd: 24_000 });
-  const score = computeFletchScore(m, CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
-  const why = explainWhyItsMoving(m, CLEAN_RISK, score);
-
-  assert.ok(why.bullets.some((b) => b.includes("12 buys")));
-  assert.ok(why.bullets.some((b) => b.includes("88 holders")));
-  assert.ok(why.bullets.some((b) => b.includes("$24,000")));
+test("every bullet is a direct render of a signal's own explanation + evidence — nothing added", () => {
+  const s = signal({ explanation: "Holder count increased since the last check.", evidence: "100 → 142 (+42.0%) over 10m" });
+  const why = explainWhyItsMoving([s], CLEAN_RISK);
+  assert.equal(why.bullets.length, 1);
+  assert.equal(why.bullets[0], "Holder count increased since the last check. (100 → 142 (+42.0%) over 10m)");
 });
 
-test("unavailable smart-money and social show up as explicit unavailable bullets, not silence or fake numbers", () => {
-  const m = metrics({ buyCountWindow: 1, sellCountWindow: 0 });
-  const score = computeFletchScore(m, CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
-  const why = explainWhyItsMoving(m, CLEAN_RISK, score);
+test("with zero signals, shows an explicit unavailable bullet in the brief's own phrasing — never silence", () => {
+  const why = explainWhyItsMoving([], CLEAN_RISK);
+  assert.equal(why.bullets.length, 1);
+  assert.equal(why.bullets[0], "Unavailable — not enough signal data yet to explain recent movement.");
+  assert.equal(why.insufficientData, true);
+});
 
-  assert.ok(why.bullets.some((b) => b.startsWith("smart-money activity: unavailable")));
-  assert.ok(why.bullets.some((b) => b.startsWith("social momentum: unavailable")));
+test("risk-derived signal types (deployer risk, concentration, etc.) are excluded from movement bullets — shown once, in Risk", () => {
+  const signals = [
+    signal({ type: "BUY_PRESSURE", explanation: "Buy pressure." }),
+    signal({ type: "HOLDER_CONCENTRATION", severity: "HIGH", explanation: "top 10 holders own 61%", evidence: "top 10 holders own 61%" }),
+  ];
+  const why = explainWhyItsMoving(signals, CLEAN_RISK);
+  assert.equal(why.bullets.length, 1);
+  assert.ok(why.bullets[0].includes("Buy pressure"));
+});
+
+test("movement bullets are ordered by severity, most notable first", () => {
+  const signals = [
+    signal({ type: "PRICE_UP", severity: "LOW", explanation: "low", evidence: "e1" }),
+    signal({ type: "WHALE_BUY_FROM_CURVE", severity: "HIGH", explanation: "high", evidence: "e2" }),
+    signal({ type: "HOLDER_GROWTH", severity: "MEDIUM", explanation: "medium", evidence: "e3" }),
+  ];
+  const why = explainWhyItsMoving(signals, CLEAN_RISK);
+  assert.deepEqual(why.bullets, ["high (e2)", "medium (e3)", "low (e1)"]);
 });
 
 test("risk bullets only surface findings above LOW, prefixed with the exact level", () => {
   const risk: RiskReport = {
     level: "HIGH",
     findings: [
-      { level: "LOW", evidence: "small dev buy" },
-      { level: "HIGH", evidence: "top 10 holders own 61%" },
+      { level: "LOW", code: "CLEAN", evidence: "small dev buy" },
+      { level: "HIGH", code: "HOLDER_CONCENTRATION", evidence: "top 10 holders own 61%" },
     ],
     safetyScore: 40,
   };
-  const m = metrics();
-  const score = computeFletchScore(m, risk, NO_SMART_MONEY, NO_SOCIAL);
-  const why = explainWhyItsMoving(m, risk, score);
-
+  const why = explainWhyItsMoving([], risk);
   assert.deepEqual(why.risks, ["[HIGH] top 10 holders own 61%"]);
 });
 
 test("a genuinely clean token still gets one explicit LOW risk line, never an empty risk list", () => {
-  const m = metrics();
-  const score = computeFletchScore(m, CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
-  const why = explainWhyItsMoving(m, CLEAN_RISK, score);
+  const why = explainWhyItsMoving([], CLEAN_RISK);
   assert.equal(why.risks.length, 1);
   assert.match(why.risks[0], /^\[LOW\]/);
+});
+
+test("insufficientData is true only when there are zero movement signals, regardless of risk findings", () => {
+  const riskOnly = explainWhyItsMoving([signal({ type: "THIN_LIQUIDITY" })], CLEAN_RISK);
+  assert.equal(riskOnly.insufficientData, true); // THIN_LIQUIDITY is risk-derived, not a movement signal
+
+  const withMovement = explainWhyItsMoving([signal({ type: "BUY_PRESSURE" })], CLEAN_RISK);
+  assert.equal(withMovement.insufficientData, false);
 });

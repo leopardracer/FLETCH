@@ -32,6 +32,7 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     sellCountWindow: 0,
     volumePairAssetWindow: null,
     topHolderConcentrationPercent: null,
+    whaleMoves: [],
     ...overrides,
   };
 }
@@ -83,4 +84,41 @@ test("safety score never goes below 0 even with many stacked findings", () => {
   );
   assert.ok(r.safetyScore >= 0);
   assert.equal(r.level, "CRITICAL");
+});
+
+test("whale sells into the curve are flagged, classified only when the curve address is known", () => {
+  const CURVE = "0x2222222222222222222222222222222222222222" as const;
+  const m = metrics({
+    holderCount: 50,
+    whaleMoves: [{ from: "0x1111111111111111111111111111111111111111" as const, to: CURVE, amount: 2_000_000, txHash: "0xabc" as const, blockNumber: 1n }],
+  });
+  const withLaunch = analyzeRisk(launch({ curve: CURVE }), m);
+  const dump = withLaunch.findings.find((f) => f.code === "WHALE_DUMPING");
+  assert.ok(dump);
+  assert.match(dump!.evidence, /1 whale sell/);
+});
+
+test("liquidity deterioration only fires with a previous snapshot, and needs a real >15% drop", () => {
+  const m = metrics({ liquidityUsd: 8_000 });
+  const noHistory = analyzeRisk(null, m, null);
+  assert.equal(noHistory.findings.some((f) => f.code === "LIQUIDITY_DETERIORATION"), false);
+
+  const prevSmallDrop = { liquidityUsd: 8_500 } as any;
+  const smallDrop = analyzeRisk(null, m, prevSmallDrop);
+  assert.equal(smallDrop.findings.some((f) => f.code === "LIQUIDITY_DETERIORATION"), false);
+
+  const prevBigDrop = { liquidityUsd: 20_000 } as any;
+  const bigDrop = analyzeRisk(null, m, prevBigDrop);
+  const finding = bigDrop.findings.find((f) => f.code === "LIQUIDITY_DETERIORATION");
+  assert.ok(finding);
+  assert.equal(finding!.level, "HIGH");
+});
+
+test("abnormal sell pressure compares deltas since the previous snapshot, not the cumulative window", () => {
+  const prev = { buyCountWindow: 10, sellCountWindow: 5 } as any;
+  const m = metrics({ buyCountWindow: 12, sellCountWindow: 15 }); // +2 buys, +10 sells since last check
+  const r = analyzeRisk(null, m, prev);
+  const finding = r.findings.find((f) => f.code === "ABNORMAL_SELL_PRESSURE");
+  assert.ok(finding);
+  assert.match(finding!.evidence, /10 sells vs 2 buys/);
 });

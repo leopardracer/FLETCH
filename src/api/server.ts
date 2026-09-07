@@ -7,11 +7,13 @@ import { pingChain } from "../chain/client.js";
 import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
 import { scanRecentLaunches, devBuyPercentOfCurveSupply } from "../chain/hunt.js";
 import { readTokenInfo } from "../chain/token.js";
-import { analyzeRisk } from "../risk/riskAnalysis.js";
-import { computeFletchScore } from "../scoring/fletchScore.js";
 import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
 import { getSocialSignalForToken } from "../social/social.js";
+import { getWalletIntelligence } from "../wallets/walletScore.js";
 import { explainWhyItsMoving } from "../ai/explain.js";
+import { analyzeAndPersist } from "../signals/signalService.js";
+import { getSnapshotHistory } from "../persistence/snapshots.js";
+import { getRecentSignals, getSignalsForToken } from "../persistence/signalsStore.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -26,7 +28,7 @@ export function createServer() {
 
   app.get("/api/health", async (_req, res) => {
     const chain = await pingChain();
-    res.json({ ok: chain.ok, chain, blockscoutConfigured: config.hasBlockscout() });
+    res.json({ ok: chain.ok, chain, blockscoutConfigured: config.hasBlockscout(), pollerEnabled: config.enablePoller });
   });
 
   // Early Signals feed — new tokens, scored.
@@ -39,10 +41,9 @@ export function createServer() {
       const rows = await Promise.all(
         limited.map(async (launch) => {
           const metrics = await provider.getTokenMetrics(launch.token).catch(() => null);
-          const risk = analyzeRisk(launch, metrics);
           const smartMoney = await getSmartMoneyForToken(launch.token);
           const social = await getSocialSignalForToken(launch.token);
-          const score = metrics ? computeFletchScore(metrics, risk, smartMoney, social) : null;
+          const analysis = metrics ? analyzeAndPersist(launch.token, launch, metrics, smartMoney, social) : null;
           const info = await readTokenInfo(launch.token).catch(() => null);
 
           return {
@@ -51,14 +52,38 @@ export function createServer() {
             deployer: launch.deployer,
             launchBlock: launch.launchBlock.toString(),
             devBuyPercent: devBuyPercentOfCurveSupply(launch.devBuyTokens),
-            riskLevel: risk.level,
-            fletchScore: score?.overall ?? null,
+            riskLevel: analysis?.risk.level ?? null,
+            fletchScore: analysis?.score.overall ?? null,
+            topSignal: analysis?.signals[0] ?? null,
           };
         })
       );
 
       rows.sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1));
       res.json({ count: rows.length, tokens: rows });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
+  // Chain-wide live signal feed — events worth attention, not a token list.
+  // Sorted by severity then recency (see persistence/signalsStore.ts).
+  app.get("/api/signals", async (req, res) => {
+    try {
+      const limit = req.query.limit ? Math.min(200, Number(req.query.limit)) : 50;
+      const signals = getRecentSignals(limit);
+      const uniqueTokens = [...new Set(signals.map((s) => s.token))];
+      const symbolByToken = new Map<string, string | null>();
+      await Promise.all(
+        uniqueTokens.map(async (t) => {
+          const info = await readTokenInfo(t as `0x${string}`).catch(() => null);
+          symbolByToken.set(t, info?.symbol ?? null);
+        })
+      );
+      res.json({
+        count: signals.length,
+        signals: signals.map((s) => ({ ...s, symbol: symbolByToken.get(s.token) ?? null })),
+      });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "unknown error" });
     }
@@ -73,21 +98,52 @@ export function createServer() {
       const launches = await scanRecentLaunches(50_000n);
       const launch = launches.find((l) => l.token.toLowerCase() === address.toLowerCase()) ?? null;
 
-      const risk = analyzeRisk(launch, metrics);
       const smartMoney = await getSmartMoneyForToken(address);
       const social = await getSocialSignalForToken(address);
-      const score = computeFletchScore(metrics, risk, smartMoney, social);
-      const why = explainWhyItsMoving(metrics, risk, score);
+      const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social);
+      const why = explainWhyItsMoving(signals, risk);
 
       res.json({
         token: { address, symbol: info.symbol, name: info.name, contractExists: info.contractExists },
         metrics,
         risk,
         fletchScore: score,
+        signals,
         whyIsItMoving: why,
         smartMoney,
         social,
+        dataAvailability: {
+          liquidity: metrics.liquidityUsd !== null ? "REAL" : "UNAVAILABLE",
+          holders: metrics.holderCount !== null ? "REAL" : "UNAVAILABLE",
+          whaleActivity: metrics.holderCount !== null ? "REAL" : "UNAVAILABLE",
+          smartMoney: smartMoney.available ? "REAL" : "NOT_YET_IMPLEMENTED",
+          social: social.available ? "REAL" : "NOT_YET_IMPLEMENTED",
+          postGraduationPricing: "NOT_YET_IMPLEMENTED",
+          blockscoutAcceleration: config.hasBlockscout() ? "REAL" : "REQUIRES_API_KEY",
+        },
       });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
+  // Snapshot history — "how has this token's score evolved?"
+  app.get("/api/tokens/:address/history", async (req, res) => {
+    try {
+      const address = req.params.address as `0x${string}`;
+      const limit = req.query.limit ? Math.min(500, Number(req.query.limit)) : 50;
+      res.json({ address, snapshots: getSnapshotHistory(address, limit) });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
+  // Signal timeline for one token.
+  app.get("/api/tokens/:address/signals", async (req, res) => {
+    try {
+      const address = req.params.address as `0x${string}`;
+      const limit = req.query.limit ? Math.min(200, Number(req.query.limit)) : 50;
+      res.json({ address, signals: getSignalsForToken(address, limit) });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "unknown error" });
     }
@@ -100,6 +156,17 @@ export function createServer() {
       const address = req.params.address as `0x${string}`;
       const activity = await provider.getWalletActivity(address);
       res.json({ address, wallets: activity });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
+  // Wallet-level intelligence — see wallets/walletScore.ts for exactly what's
+  // real (participation record) vs. NOT_YET_IMPLEMENTED (PnL, win rate).
+  app.get("/api/wallets/:address", async (req, res) => {
+    try {
+      const address = req.params.address as `0x${string}`;
+      res.json(getWalletIntelligence(address));
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "unknown error" });
     }

@@ -1,4 +1,5 @@
 import { getClient } from "./client.js";
+import { ImmutableCache } from "../core/cache.js";
 
 export const erc20Abi = [
   {
@@ -25,8 +26,16 @@ export interface TokenInfo {
   contractExists: boolean;
 }
 
-/** Generalized from GTTM's single-token readTokenInfo — takes any address. */
+/** Generalized from GTTM's single-token readTokenInfo — takes any address.
+ *  Symbol/name/decimals never change once deployed, so this is cached
+ *  for the life of the process — see docs/DEVELOPMENT.md#performance. */
+const tokenInfoCache = new ImmutableCache<string, TokenInfo>();
+
 export async function readTokenInfo(address: `0x${string}`): Promise<TokenInfo> {
+  return tokenInfoCache.getOrCompute(address.toLowerCase(), () => readTokenInfoUncached(address));
+}
+
+async function readTokenInfoUncached(address: `0x${string}`): Promise<TokenInfo> {
   const client = getClient();
 
   const bytecode = await client.getBytecode({ address });

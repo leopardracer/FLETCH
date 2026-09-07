@@ -4,40 +4,53 @@
 
 ## Levels
 
-`LOW` / `MEDIUM` / `HIGH` / `CRITICAL` — never a bare "SCAM" label. Every finding is an `{ level, evidence }` pair; `evidence` always names the actual number behind the flag ("top 10 holders own 82% of tracked supply", not "high concentration").
+`LOW` / `MEDIUM` / `HIGH` / `CRITICAL` — never a bare "SCAM" label. Every finding is a `{ level, code, evidence }` triple; `code` is a stable identifier (see below) and `evidence` always names the actual number behind the flag.
 
-The token's overall level is the highest level among its findings. A numeric concern count (sum of each finding's level weight) also feeds `safetyScore` (0–100, higher = safer), which is what the FLETCH Score's Safety component uses directly — no re-derivation.
+The token's overall level is the highest level among its findings. A numeric concern count also feeds `safetyScore` (0–100, higher = safer), which the FLETCH Score's Safety component uses directly.
 
-## What's checked today
+## Finding codes
 
-**At launch** (from the Pons V2 factory/curve event data — ported from GTTM's `huntScore.ts`, which called this pattern-matching on read-only chain data, not prediction):
+Each finding carries a `RiskFindingCode` — this is what lets the signal engine promote risk findings into signals 1:1 (see [SIGNALS.md](./SIGNALS.md)) without parsing evidence text.
 
-| Finding | Trigger | Level |
+**At launch** (from the Pons V2 factory/curve event data — ported from GTTM's `huntScore.ts`):
+
+| Code | Trigger | Level |
 |---|---|---|
-| Large dev buy | dev bought >5% of curve-sold supply | HIGH |
-| Moderate dev buy | dev bought 1–5% | MEDIUM |
-| Bundled wallets | 3+ wallets declared exempt from opening snipe tax | HIGH |
-| Bundled wallets | 1–2 wallets exempt | MEDIUM |
-| Serial deployer | 5+ launches from this deployer in the scanned window | HIGH |
-| Serial deployer | 2–4 launches | MEDIUM |
-| Self-exempted dev | dev's own buy paid less than the standard opening tax | MEDIUM |
+| `DEV_BUY` | dev bought >5% of curve-sold supply | HIGH |
+| `DEV_BUY` | dev bought 1–5% | MEDIUM |
+| `BUNDLED_WALLETS` | 3+ wallets declared exempt from opening snipe tax | HIGH |
+| `BUNDLED_WALLETS` | 1–2 wallets exempt | MEDIUM |
+| `SERIAL_DEPLOYER` | 5+ launches from this deployer in the scanned window | HIGH |
+| `SERIAL_DEPLOYER` | 2–4 launches | MEDIUM |
+| `REDUCED_DEV_TAX` | dev's own buy paid less than the standard opening tax | MEDIUM |
 
-**Ongoing** (from live holder/liquidity metrics — new in FLETCH, GTTM only ever looked at launch moment for one token):
+**Ongoing, point-in-time** (from live holder/liquidity/whale metrics):
 
-| Finding | Trigger | Level |
+| Code | Trigger | Level |
 |---|---|---|
-| Extreme concentration | top 10 tracked accumulators hold >70% | CRITICAL |
-| High concentration | 50–70% | HIGH |
-| Elevated concentration | 35–50% | MEDIUM |
-| Very thin liquidity | under $5,000 | HIGH |
-| Thin liquidity | $5,000–$20,000 | MEDIUM |
+| `HOLDER_CONCENTRATION` | top 10 tracked accumulators hold >70% | CRITICAL |
+| `HOLDER_CONCENTRATION` | 50–70% | HIGH |
+| `HOLDER_CONCENTRATION` | 35–50% | MEDIUM |
+| `THIN_LIQUIDITY` | liquidity under $5,000 | HIGH |
+| `THIN_LIQUIDITY` | $5,000–$20,000 | MEDIUM |
+| `WHALE_DUMPING` *(new)* | 3+ whale-sized transfers into the curve (selling) in the scan window | HIGH |
+| `WHALE_DUMPING` *(new)* | 1–2 such transfers | MEDIUM |
 
-A token with none of the above gets exactly one `LOW` finding stating "no red flags found" — the risk list is never empty, so the UI always has something to show rather than silently implying "not checked."
+**Ongoing, trend-based** *(new — only fire with a real previous snapshot; see [SIGNALS.md](./SIGNALS.md) on the comparison window)*:
+
+| Code | Trigger | Level |
+|---|---|---|
+| `LIQUIDITY_DETERIORATION` | liquidity dropped >30% since the last check | HIGH |
+| `LIQUIDITY_DETERIORATION` | dropped 15–30% | MEDIUM |
+| `ABNORMAL_SELL_PRESSURE` | sells since the last check outnumber buys 4:1+, with at least 3 sells | HIGH |
+| `ABNORMAL_SELL_PRESSURE` | outnumber 2:1–4:1 | MEDIUM |
+
+A token with none of the above gets exactly one `LOW` finding with code `CLEAN` — the risk list is never empty.
 
 ## What the brief names that isn't implemented yet
 
-Mint permissions, ownership renouncement, blacklist functionality, and transfer restrictions all require reading and interpreting arbitrary token bytecode/ABI — meaningfully different work from event-log analysis (needs either bytecode pattern-matching against known malicious templates, or a contract-analysis service). Not built in this MVP. Anything FLETCH doesn't check is simply absent from the findings list — it does **not** silently count as "checked and fine."
+Mint permissions, ownership renouncement, blacklist functionality, and transfer restrictions all require reading and interpreting arbitrary token bytecode/ABI — meaningfully different work from event-log analysis. Not built. Anything FLETCH doesn't check is simply absent from the findings list — it does **not** silently count as "checked and fine."
 
 ## Design principle
 
-Every risk finding is: a stated evidence string, a level chosen by explicit numeric thresholds (all in `riskAnalysis.ts`, nothing hidden), and reproducible from the same chain data the rest of the app reads. Tests for every threshold live in `src/risk/riskAnalysis.test.ts`.
+Every risk finding is: a stated evidence string, a level chosen by explicit numeric thresholds (all in `riskAnalysis.ts`), and reproducible from the same chain data (and, for trend findings, the same persisted snapshot) the rest of the app reads. Tests for every threshold, including the new trend-based ones, live in `src/risk/riskAnalysis.test.ts`.

@@ -20,11 +20,12 @@ function metrics(overrides: Partial<TokenMetrics> = {}): TokenMetrics {
     sellCountWindow: 0,
     volumePairAssetWindow: null,
     topHolderConcentrationPercent: null,
+    whaleMoves: [],
     ...overrides,
   };
 }
 
-const CLEAN_RISK: RiskReport = { level: "LOW", findings: [{ level: "LOW", evidence: "no red flags found" }], safetyScore: 100 };
+const CLEAN_RISK: RiskReport = { level: "LOW", findings: [{ level: "LOW", code: "CLEAN", evidence: "no red flags found" }], safetyScore: 100 };
 
 test("with smart money and social unavailable, overall score is null only if EVERY component is unavailable", () => {
   const score = computeFletchScore(metrics(), CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
@@ -72,7 +73,7 @@ test("more buy pressure yields a higher momentum score than balanced activity, a
 });
 
 test("safety component score matches the risk report's safetyScore exactly — no re-derivation", () => {
-  const risk: RiskReport = { level: "HIGH", findings: [{ level: "HIGH", evidence: "x" }], safetyScore: 64 };
+  const risk: RiskReport = { level: "HIGH", findings: [{ level: "HIGH", code: "DEV_BUY", evidence: "x" }], safetyScore: 64 };
   const score = computeFletchScore(metrics(), risk, NO_SMART_MONEY, NO_SOCIAL);
   assert.equal(score.components.safety.value, 64);
 });
@@ -83,4 +84,49 @@ test("weightsUsed only lists components that actually had a value, and they sum 
   assert.ok(!("social" in score.weightsUsed));
   const sum = Object.values(score.weightsUsed).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(sum - 1) < 0.02);
+});
+
+test("whale activity is unavailable when the holder scan itself failed, not when it succeeded with zero whales", () => {
+  const scanFailed = computeFletchScore(metrics({ holderCount: null }), CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
+  assert.equal(scanFailed.components.whaleActivity.value, null);
+
+  const scanSucceededNoWhales = computeFletchScore(metrics({ holderCount: 50, whaleMoves: [] }), CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
+  assert.equal(scanSucceededNoWhales.components.whaleActivity.value, 50);
+});
+
+test("whale activity score leans toward buys when curve-buy volume dominates curve-sell volume", () => {
+  const CURVE = "0x2222222222222222222222222222222222222222" as const;
+  const buyHeavy = computeFletchScore(
+    metrics({
+      holderCount: 50,
+      whaleMoves: [{ from: CURVE, to: "0x1111111111111111111111111111111111111111" as const, amount: 10_000, txHash: "0xa" as const, blockNumber: 1n }],
+    }),
+    CLEAN_RISK,
+    NO_SMART_MONEY,
+    NO_SOCIAL,
+    null,
+    CURVE
+  );
+  const sellHeavy = computeFletchScore(
+    metrics({
+      holderCount: 50,
+      whaleMoves: [{ from: "0x1111111111111111111111111111111111111111" as const, to: CURVE, amount: 10_000, txHash: "0xb" as const, blockNumber: 1n }],
+    }),
+    CLEAN_RISK,
+    NO_SMART_MONEY,
+    NO_SOCIAL,
+    null,
+    CURVE
+  );
+  assert.ok(buyHeavy.components.whaleActivity.value! > sellHeavy.components.whaleActivity.value!);
+});
+
+test("holder growth uses a real percentage once a previous snapshot exists, and falls back honestly without one", () => {
+  const noHistory = computeFletchScore(metrics({ holderCount: 300 }), CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL);
+  assert.match(noHistory.components.holderGrowth.label, /no history yet/);
+
+  const prev = { holderCount: 100 } as any;
+  const withHistory = computeFletchScore(metrics({ holderCount: 150 }), CLEAN_RISK, NO_SMART_MONEY, NO_SOCIAL, prev);
+  assert.match(withHistory.components.holderGrowth.label, /100 → 150 holders \(\+50\.0%\)/);
+  assert.equal(withHistory.components.holderGrowth.value, 100); // clamped: 50 + 50% = 100
 });

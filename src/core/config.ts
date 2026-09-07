@@ -10,6 +10,11 @@ const envSchema = z.object({
   SIGNAL_WINDOW_BLOCKS: z.coerce.number().default(50_000),
   WHALE_THRESHOLD_TOKENS: z.coerce.number().default(1_000_000),
   PORT: z.coerce.number().default(8787),
+  DB_PATH: z.string().optional().default("./fletch.db"),
+  ENABLE_POLLER: z.coerce.boolean().default(true),
+  POLL_INTERVAL_MS: z.coerce.number().default(300_000), // 5 min — see docs/ARCHITECTURE.md on why this isn't more aggressive against a shared public RPC
+  POLL_TOKEN_LIMIT: z.coerce.number().default(15),
+  SNAPSHOT_MIN_INTERVAL_SECONDS: z.coerce.number().default(60), // don't record near-duplicate snapshots from rapid page views
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -33,6 +38,11 @@ export const config = {
   signalWindowBlocks: BigInt(env.SIGNAL_WINDOW_BLOCKS),
   whaleThresholdTokens: env.WHALE_THRESHOLD_TOKENS,
   port: env.PORT,
+  dbPath: env.DB_PATH,
+  enablePoller: env.ENABLE_POLLER,
+  pollIntervalMs: env.POLL_INTERVAL_MS,
+  pollTokenLimit: env.POLL_TOKEN_LIMIT,
+  snapshotMinIntervalSeconds: env.SNAPSHOT_MIN_INTERVAL_SECONDS,
 
   /** True when Blockscout's accelerated holder/tx endpoints are usable —
    *  otherwise providers must fall back to raw RPC log replay. */

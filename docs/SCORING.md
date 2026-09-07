@@ -6,12 +6,15 @@
 
 | Component | Weight | Source | Real today? |
 |---|---|---|---|
-| Momentum | 0.25 | buy/sell counts in the scan window | yes |
-| Smart Money | 0.20 | cross-token wallet performance history | no — [unavailable](./DATA.md#smart-money) |
-| Social | 0.15 | mentions / sentiment | no — [unavailable](./DATA.md#social) |
-| Liquidity | 0.15 | curve's own quote-asset balance, converted to USD | yes (pre-graduation only) |
-| Holder Growth | 0.15 | holder count from a full `Transfer` log replay | yes (count, not yet growth *rate* — see below) |
-| Safety | 0.10 | inverted risk score from `risk/riskAnalysis.ts` | yes |
+| Momentum | 0.22 | buy/sell counts in the scan window | yes |
+| Smart Money | 0.16 | cross-token wallet performance history | no — [unavailable](./DATA.md#smart-money) |
+| Social | 0.12 | mentions / sentiment | no — [unavailable](./DATA.md#social) |
+| Liquidity | 0.14 | curve's own quote-asset balance, converted to USD | yes (pre-graduation only) |
+| Holder Growth | 0.14 | real % change since the last snapshot, when one exists; otherwise an absolute-count proxy | yes, upgraded in Phase 2 — see below |
+| Whale Activity | 0.12 | large transfers classified against the token's curve address | yes — new in Phase 2 |
+| Safety | 0.10 | inverse of the risk report | yes |
+
+Weights don't have to sum to the brief's suggested numbers exactly — they were re-derived after inspecting what's actually measurable per component (see the rationale inline in `fletchScore.ts`). They do sum to 1.00.
 
 ## The rule: only weight what's available
 
@@ -25,19 +28,21 @@ for (const [k, c] of available) {
 }
 ```
 
-`weightsUsed` on the returned `FletchScore` records exactly which components fed the number and at what re-normalized weight — that's what a "why did this score change" explanation would diff against once score history is persisted (not implemented yet — see [DEVELOPMENT.md](./DEVELOPMENT.md)).
+`weightsUsed` on the returned `FletchScore` records exactly which components fed the number and at what re-normalized weight.
 
 ## Component formulas, as they exist today
 
-**Momentum** — `null` if there's been zero buy/sell activity in the window. Otherwise a blend of buy-side pressure (`buyCount / totalCount`) and a log-scaled activity level, so a token with heavy two-sided trading isn't penalized as hard as a "no activity yet" token, but isn't purely ranked by raw volume either.
+**Momentum** — `null` if there's been zero buy/sell activity in the window. Otherwise a blend of buy-side pressure (`buyCount / totalCount`) and a log-scaled activity level.
 
-**Liquidity** — `null` with a stated reason (e.g. "graduated to v4, not readable yet" or "USD feed unavailable") whenever `liquidityUsd` isn't resolvable. Otherwise log-scaled: $0 → 0, ~$100k+ → 100, so early liquidity growth still moves the needle instead of everything under $10k reading as zero.
+**Liquidity** — `null` with a stated reason (e.g. "graduated to v4, not readable yet") whenever `liquidityUsd` isn't resolvable. Otherwise log-scaled: $0 → 0, ~$100k+ → 100.
 
-**Holder Growth** — currently scores *absolute* holder count (log-scaled), not a growth rate, because there's no snapshot history store to diff against yet. This is named honestly in the code and the dashboard rather than implying a trend exists — see the "Not built yet" note below.
+**Holder Growth** — *(upgraded in Phase 2)*. When a previous snapshot exists (within the comparison window persistence provides — see [SIGNALS.md](./SIGNALS.md)), this is a real percentage: 0% change → 50 (neutral), +50% or more → 100, −50% or more → 0, clamped. The label states the exact before/after counts and percentage. Without a previous snapshot, it falls back to the original log-scaled absolute-count proxy, and the label says so explicitly ("no history yet, showing count not growth rate") — never silently presented as a rate it isn't.
 
-**Safety** — passed through directly from `RiskReport.safetyScore` (100 minus a weighted concern count from `risk/riskAnalysis.ts`) — no re-derivation.
+**Whale Activity** — *(new in Phase 2)*. `null` only when the underlying holder/transfer scan itself failed (`holderCount === null`) — genuinely unknown, not zero. A successful scan with zero whale-threshold transfers is real information ("checked, found none") and scores a defined neutral 50. When whale transfers exist and the token's curve address is known, moves are classified as buy-from-curve or sell-to-curve by weight; the score leans toward 90 when buys dominate, 30 when sells dominate. Undirected transfers (neither into nor out of the curve — ambiguous wallet-to-wallet moves) nudge the score up only mildly and are capped at 65, since intent isn't known.
+
+**Safety** — passed through directly from `RiskReport.safetyScore` — no re-derivation.
 
 ## Not built yet
 
-- **Real holder-growth rate.** Needs periodic snapshots persisted somewhere (a database), then a diff between two points in time. Right now "Holder Growth" is an honest proxy for "how many holders, on a log scale" — see [DATA.md](./DATA.md) for what closes this gap.
-- **Smart Money and Social components.** Both are stubbed to `unavailable` — see [DATA.md](./DATA.md#smart-money) and [DATA.md](./DATA.md#social) for exactly what's missing.
+- **Smart Money and Social components** — both stubbed to `unavailable`. See [DATA.md](./DATA.md#smart-money) and [DATA.md](./DATA.md#social).
+- **A true baseline for Holder Growth beyond one snapshot back** — the current comparison is always against the single most recent snapshot older than the comparison window, not a longer trend line. `GET /api/tokens/:address/history` exposes the raw snapshot history if you want to compute your own longer-window trend client-side.

@@ -19,6 +19,14 @@ export interface Token {
   graduated: boolean | null; // null = unknown (no launch record found)
 }
 
+export interface WhaleMove {
+  from: `0x${string}`;
+  to: `0x${string}`;
+  amount: number;
+  txHash: `0x${string}`;
+  blockNumber: bigint;
+}
+
 export interface TokenMetrics {
   priceInPair: number | null;
   liquidityPairAsset: number | null;
@@ -30,6 +38,8 @@ export interface TokenMetrics {
   sellCountWindow: number;
   volumePairAssetWindow: number | null;
   topHolderConcentrationPercent: number | null; // % held by top 10 non-protocol accumulators
+  /** Transfers at/above the configured whale threshold, in the same scan window as holderCount. Real data — see chain/holders.ts. */
+  whaleMoves: WhaleMove[];
 }
 
 export interface Transfer {

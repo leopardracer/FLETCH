@@ -8,7 +8,21 @@ import { readLiquidity } from "../../chain/liquidity.js";
 import { erc20Abi } from "../../chain/token.js";
 import { curveAbi } from "../../chain/pons.js";
 import { config } from "../../core/config.js";
+import { ImmutableCache } from "../../core/cache.js";
+import { recordWalletActivity } from "../../persistence/walletActivityStore.js";
 import type { ChainDataProvider, Token, TokenMetrics, Transfer, Holder, WalletActivity } from "../types.js";
+
+const blockTimestampCache = new ImmutableCache<string, number>();
+async function getBlockTimestamp(blockNumber: bigint): Promise<number | null> {
+  try {
+    return await blockTimestampCache.getOrCompute(blockNumber.toString(), async () => {
+      const block = await getClient().getBlock({ blockNumber });
+      return Number(block.timestamp);
+    });
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Free-tier implementation: raw RPC + the Pons V2 factory/curve reads
@@ -25,12 +39,9 @@ import type { ChainDataProvider, Token, TokenMetrics, Transfer, Holder, WalletAc
 export class RpcChainDataProvider implements ChainDataProvider {
   async getNewTokens(windowBlocks?: bigint): Promise<Token[]> {
     const launches = await scanRecentLaunches(windowBlocks);
-    const client = getClient();
-    const latestBlock = await client.getBlock({ blockNumber: launches[0]?.launchBlock });
     return Promise.all(
       launches.map(async (l) => {
-        const block = await client.getBlock({ blockNumber: l.launchBlock }).catch(() => null);
-        const timestamp = block ? Number(block.timestamp) : null;
+        const timestamp = await getBlockTimestamp(l.launchBlock);
         const curveState = await readCurveState({
           found: true,
           token: l.token,
@@ -95,6 +106,13 @@ export class RpcChainDataProvider implements ChainDataProvider {
       sellCountWindow,
       volumePairAssetWindow,
       topHolderConcentrationPercent: holders ? topHolderConcentrationPercent(holders, 10) : null,
+      whaleMoves: (holders?.whaleMoves ?? []).map((w) => ({
+        from: w.from as `0x${string}`,
+        to: w.to as `0x${string}`,
+        amount: w.amount,
+        txHash: w.txHash as `0x${string}`,
+        blockNumber: BigInt(w.blockNumber),
+      })),
     };
   }
 
@@ -135,7 +153,10 @@ export class RpcChainDataProvider implements ChainDataProvider {
    * which returns UNAVAILABLE rather than pretending this data answers that.
    */
   async getWalletActivity(address: `0x${string}`): Promise<WalletActivity[]> {
-    const holders = await this.getHolders(address);
+    const [holders, metrics] = await Promise.all([this.getHolders(address), this.getTokenMetrics(address).catch(() => null)]);
+    for (const h of holders) {
+      recordWalletActivity(h.address, address, h.balance, metrics?.priceInPair ?? null);
+    }
     return holders.map((h) => ({
       wallet: h.address,
       tokensTraded: 1,
