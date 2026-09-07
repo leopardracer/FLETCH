@@ -89,6 +89,20 @@ test("GET /api/monitoring responds 200 with real counts on a fresh database, and
   assert.equal("blockscoutApiKey" in body, false);
 });
 
+test("GET /api/monitoring exposes `rpcConfigured` and `running` as real, distinct facts alongside `enabled` — the dashboard needs the actual truth, not just the config flag", async () => {
+  const res = await fetch(`${baseUrl}/api/monitoring`);
+  const body = await res.json();
+  // This suite runs with ENABLE_POLLER=false and RPC_URL unset (see the
+  // top of this file), so all three are false here — but `running` is a
+  // distinct, independently-computed field (enabled && rpcConfigured),
+  // not an alias for `enabled`, which is what made the dashboard show
+  // "WATCHING" even when the poller never started with RPC_URL unset.
+  assert.equal(body.enabled, false);
+  assert.equal(body.rpcConfigured, false);
+  assert.equal(body.running, false);
+  assert.equal(body.running, body.enabled && body.rpcConfigured);
+});
+
 test("GET /api/tokens fails gracefully (500 with a clear reason) when RPC isn't configured — never a raw crash or hang", async () => {
   const res = await fetch(`${baseUrl}/api/tokens`);
   assert.equal(res.status, 500);

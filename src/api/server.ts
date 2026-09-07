@@ -57,8 +57,17 @@ export function createServer() {
     try {
       const now = Math.floor(Date.now() / 1000);
       const health = getMonitoringHealth(now);
+      const rpcConfigured = !!config.rpcUrl;
       res.json({
         enabled: config.enablePoller,
+        rpcConfigured,
+        // `enabled` only reflects the ENABLE_POLLER config flag — the poller
+        // (see index.ts) also refuses to start at all without RPC_URL, since
+        // every check would just fail. `running` is the actual truth of
+        // whether anything is watching right now; the dashboard shows this,
+        // not `enabled` alone, to avoid claiming FLETCH is watching when it
+        // never started.
+        running: config.enablePoller && rpcConfigured,
         discoveryIntervalMs: config.discoveryIntervalMs,
         pollIntervalMs: config.pollIntervalMs,
         maxConcurrentTokens: config.maxConcurrentTokens,

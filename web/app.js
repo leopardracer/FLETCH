@@ -392,12 +392,19 @@ async function renderMonitoring() {
   const body = document.getElementById("monitoring-body");
   try {
     const m = await getJSON("/api/monitoring");
-    const statusLabel = m.enabled ? "WATCHING" : "DISABLED";
-    const statusClass = m.enabled ? "sev-LOW" : "sev-HIGH";
+    const statusLabel = m.running ? "WATCHING" : "NOT WATCHING";
+    const statusClass = m.running ? "sev-LOW" : "sev-HIGH";
+    const statusReason = m.running
+      ? null
+      : !m.enabled
+      ? "ENABLE_POLLER is off"
+      : !m.rpcConfigured
+      ? "RPC_URL isn't set — nothing to watch with"
+      : null;
 
     body.innerHTML = `
       <div class="panel-block">
-        <div class="mini-row"><span><span class="why-dot ${statusClass}" style="margin-right:8px"></span>Watcher status</span><span>${statusLabel}</span></div>
+        <div class="mini-row"><span><span class="why-dot ${statusClass}" style="margin-right:8px"></span>Watcher status</span><span>${statusLabel}${statusReason ? ` <span style="color:var(--ink-faint);font-weight:400">(${statusReason})</span>` : ""}</span></div>
         <div class="mini-row"><span>Discovery interval</span><span>${Math.round(m.discoveryIntervalMs / 1000)}s</span></div>
         <div class="mini-row"><span>Check interval</span><span>${Math.round(m.pollIntervalMs / 1000)}s</span></div>
         <div class="mini-row"><span>Max concurrent checks</span><span>${m.maxConcurrentTokens}</span></div>
