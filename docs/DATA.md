@@ -11,7 +11,7 @@ Researched fresh for this project (chain APIs move fast; don't trust this file b
 
 ## What's real right now
 
-New-token discovery, launch-moment risk signals (dev-buy %, bundled/exempt wallets, serial-deployer detection), holder count + top accumulators + whale moves (full `Transfer` log replay from the launch block), pre-graduation liquidity and price (the curve's own balance and last trade), buy/sell counts and volume since launch, **persisted snapshots and signal history (Phase 2)**, **trend-based risk findings and signals once a previous snapshot exists (Phase 2)**, **the Whale Activity score component, classified against the token's own curve address (Phase 2)**.
+New-token discovery, launch-moment risk signals (dev-buy %, bundled/exempt wallets, serial-deployer detection), holder count + top accumulators + whale moves (full `Transfer` log replay from the launch block), pre-graduation liquidity and price (the curve's own balance and last trade), buy/sell counts and volume since launch, **persisted snapshots and signal history (Phase 2)**, **trend-based risk findings and signals once a previous snapshot exists (Phase 2)**, **the Whale Activity score component, classified against the token's own curve address (Phase 2)**, **Meme Radar's recency-weighted signal-convergence ranking, computed entirely from persisted signals and snapshots (Meme Radar) — see [docs/RADAR.md](./RADAR.md)**.
 
 ## What's explicitly unavailable, and why
 

@@ -3,6 +3,7 @@ const app = document.getElementById("app");
 
 const NAV = [
   { id: "overview", label: "Overview" },
+  { id: "radar", label: "Radar" },
   { id: "live-signals", label: "Signals" },
   { id: "tokens", label: "Tokens" },
   { id: "wallets", label: "Wallets" },
@@ -146,6 +147,68 @@ async function checkHealth() {
     pip.classList.add("bad");
     text.textContent = "API unreachable";
   }
+}
+
+async function renderRadar() {
+  renderNav("radar");
+  app.innerHTML = `
+    <div class="section-head">
+      <div><h1>THE CHAIN IS MOVING</h1><p>Ranked by how much is changing right now — recency-weighted signal convergence, not FLETCH Score or size. A token with no recent activity isn't ranked low, it isn't shown at all.</p></div>
+    </div>
+    <div id="radar-body">${loadingLine()}</div>
+  `;
+  const body = document.getElementById("radar-body");
+  try {
+    const data = await getJSON("/api/radar");
+    const items = data.radar || [];
+    if (items.length === 0) {
+      body.innerHTML = stateBlock(
+        "pending",
+        "NOTHING MOVING YET",
+        `No token has had a detected signal in the last ${Math.round((data.windowSeconds || 1800) / 60)} minutes. Radar fills in as tokens are checked (page views or the background poller) and produce real signals — see docs/RADAR.md.`
+      );
+      return;
+    }
+    body.innerHTML = items.map((e, i) => radarCard(e, i + 1)).join("");
+  } catch (e) {
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD RADAR", e.message);
+  }
+}
+
+function radarCard(e, rank) {
+  const metricBits = [];
+  if (e.metrics.liquidityUsd !== null) metricBits.push(`$${e.metrics.liquidityUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} liquidity`);
+  if (e.metrics.holderCount !== null) metricBits.push(`${e.metrics.holderCount} holders`);
+  if (e.metrics.buyCountWindow !== null) metricBits.push(`${e.metrics.buyCountWindow}/${e.metrics.sellCountWindow} buy/sell`);
+
+  return `
+    <div class="radar-card" onclick="location.hash='#/token/${e.token}'">
+      <div class="radar-rank">${String(rank).padStart(2, "0")}</div>
+      <div class="radar-body">
+        <div class="radar-head">
+          <span class="radar-sym">${e.symbol ? "$" + e.symbol : fmtAddr(e.token)}</span>
+          <span class="radar-score-badge"><span class="radar-score-label">RADAR</span><span class="radar-score-num">${e.radarScore}</span></span>
+        </div>
+
+        <div class="radar-row">
+          <span class="radar-risk-label">RISK</span>${severityChip(e.riskLevel)}
+          <span class="radar-fletch-label">FLETCH SCORE</span><span class="radar-fletch-num">${e.fletchScore !== null ? e.fletchScore : "—"}</span>
+        </div>
+
+        <div class="radar-signal-chips">
+          ${e.topSignal ? `<span class="chip ${e.topSignal.severity}">${e.topSignal.type.replace(/_/g, " ")}</span>` : ""}
+          ${e.distinctSignalTypes > 1 ? `<span class="radar-convergence">+${e.distinctSignalTypes - 1} more signal${e.distinctSignalTypes > 2 ? "s" : ""} converging (×${e.convergenceMultiplier})</span>` : ""}
+        </div>
+
+        <div class="radar-why">
+          <div class="radar-why-label">WHY NOW</div>
+          <ul>${e.whyNow.map((w) => `<li>${w}</li>`).join("")}</ul>
+        </div>
+
+        ${metricBits.length ? `<div class="radar-metrics">${metricBits.join(" · ")}</div>` : ""}
+        <div class="radar-time">last signal ${fmtTime(e.lastSignalAt)}</div>
+      </div>
+    </div>`;
 }
 
 async function renderOverview() {
@@ -609,6 +672,8 @@ function route() {
     renderWalletDetail(walletMatch[1]);
   } else if (hash === "#/overview") {
     renderOverview();
+  } else if (hash === "#/radar") {
+    renderRadar();
   } else if (hash === "#/live-signals") {
     renderLiveSignals();
   } else if (hash === "#/wallets") {

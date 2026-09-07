@@ -16,6 +16,8 @@ flowchart TD
     D --> S
     D --> E[ai/<br/>explain.ts]
     C --> E
+    P --> R[radar/<br/>radarEngine]
+    R --> F
     S --> F[api/<br/>Express]
     E --> F
     B --> F
@@ -44,6 +46,8 @@ flowchart TD
 **`ai/`** — `explain.ts` now builds "why is it moving" directly from the `Signal[]` array the signal engine produced, instead of re-deriving bullets from raw metrics independently. Same non-negotiable rule as before: templated rendering of already-computed numbers, never a free-form model call touching raw data.
 
 **`poller/`** *(new in Phase 2)* — `poller.ts` runs `analyzeAndPersist` on an interval across the most recently launched tokens, so snapshot/signal history accumulates continuously instead of only when someone opens a token page. Off if `RPC_URL` is unset; otherwise on by default with a conservative interval — see [DEVELOPMENT.md](./DEVELOPMENT.md).
+
+**`radar/`** *(new — Meme Radar)* — `radarEngine.ts` is a pure function ranking tokens by recency-weighted signal convergence, not size or FLETCH Score. `radarService.ts` reads candidates and their latest snapshot entirely from persistence — ranking needs no live chain call. See [docs/RADAR.md](./RADAR.md).
 
 **`api/`** — Express routes, plus static-hosting the dashboard in `web/`.
 

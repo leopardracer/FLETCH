@@ -60,6 +60,22 @@ test("GET /api/signals responds 200 with an empty feed on a fresh database — n
   assert.deepEqual(body, { count: 0, signals: [] });
 });
 
+test("GET /api/radar responds 200 with an empty list on a fresh database — no signals, no candidates, not an error", async () => {
+  const res = await fetch(`${baseUrl}/api/radar`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.radar, []);
+  assert.equal(body.count, 0);
+  assert.equal(body.windowSeconds, 1800);
+});
+
+test("GET /api/radar honors a custom window query param", async () => {
+  const res = await fetch(`${baseUrl}/api/radar?window=600`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.windowSeconds, 600);
+});
+
 test("GET /api/tokens fails gracefully (500 with a clear reason) when RPC isn't configured — never a raw crash or hang", async () => {
   const res = await fetch(`${baseUrl}/api/tokens`);
   assert.equal(res.status, 500);

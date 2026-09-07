@@ -33,7 +33,7 @@ export interface Signal {
   timestamp: number; // unix seconds
 }
 
-const SEVERITY_RANK: Record<SignalSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+export const SEVERITY_RANK: Record<SignalSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 /**
  * The single most severity-worthy signal from a batch, for UI contexts

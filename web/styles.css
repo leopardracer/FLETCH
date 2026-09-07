@@ -427,6 +427,92 @@ footer {
   text-align: center;
 }
 
+/* --- Meme Radar --- */
+.radar-card {
+  display: flex;
+  gap: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.radar-card:hover { border-color: var(--orange); background: var(--panel-raised); }
+
+.radar-rank {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  width: 36px;
+  line-height: 1;
+}
+
+.radar-body { flex: 1; min-width: 0; }
+
+.radar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.radar-sym { font-size: 19px; font-weight: 700; }
+.radar-score-badge { display: flex; align-items: baseline; gap: 6px; }
+.radar-score-label { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.04em; }
+.radar-score-num { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--orange-bright); line-height: 1; }
+
+.radar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.03em;
+}
+.radar-fletch-label { margin-left: 14px; }
+.radar-fletch-num { color: var(--ink); font-weight: 600; font-size: 13px; }
+
+.radar-signal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.radar-convergence {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--orange-bright);
+}
+
+.radar-why { margin-bottom: 8px; }
+.radar-why-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.radar-why ul { margin: 0; padding-left: 16px; }
+.radar-why li { font-size: 13px; color: var(--ink-dim); line-height: 1.5; margin-bottom: 2px; }
+
+.radar-metrics {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 8px;
+}
+.radar-time {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  margin-top: 4px;
+}
+
 /* ============================================================
    Responsive — tablet and mobile. Additive only: nothing above
    this block changes for desktop. Tables scroll horizontally
@@ -482,4 +568,8 @@ footer {
   }
 
   .why-line { font-size: 11.5px; }
+
+  .radar-card { flex-direction: column; gap: 8px; padding: 14px 16px; }
+  .radar-rank { width: auto; font-size: 16px; }
+  .radar-score-num { font-size: 22px; }
 }

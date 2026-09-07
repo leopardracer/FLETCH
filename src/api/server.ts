@@ -15,6 +15,8 @@ import { analyzeAndPersist } from "../signals/signalService.js";
 import { pickTopSignal } from "../signals/types.js";
 import { getSnapshotHistory } from "../persistence/snapshots.js";
 import { getRecentSignals, getSignalsForToken } from "../persistence/signalsStore.js";
+import { getRadar } from "../radar/radarService.js";
+import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -98,6 +100,22 @@ export function createServer() {
         count: signals.length,
         signals: signals.map((s) => ({ ...s, symbol: symbolByToken.get(s.token) ?? null })),
       });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
+  });
+
+  // Meme Radar — what's starting to move right now, ranked by recency-
+  // weighted signal convergence, not by FLETCH Score or size. See
+  // radar/radarEngine.ts and docs/RADAR.md. Entirely persistence-driven
+  // (no live chain scan needed to rank); only symbol/name resolution
+  // touches the chain client, best-effort.
+  app.get("/api/radar", async (req, res) => {
+    try {
+      const windowSeconds = req.query.window ? Math.max(60, Number(req.query.window)) : RADAR_WINDOW_SECONDS_DEFAULT;
+      const limit = req.query.limit ? Math.min(100, Number(req.query.limit)) : 25;
+      const radar = await getRadar(windowSeconds);
+      res.json({ windowSeconds, count: radar.length, radar: radar.slice(0, limit) });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "unknown error" });
     }

@@ -1,6 +1,7 @@
 import { getDb } from "./db.js";
 import type { TokenMetrics } from "../data/types.js";
 import type { FletchScore } from "../scoring/fletchScore.js";
+import type { RiskLevel } from "../risk/riskAnalysis.js";
 import { config } from "../core/config.js";
 
 export interface TokenSnapshot {
@@ -18,6 +19,10 @@ export interface TokenSnapshot {
   holderGrowthScore: number | null;
   whaleActivityScore: number | null;
   safetyScore: number | null;
+  /** The categorical risk level at this snapshot — added for Meme Radar,
+   *  which needs a real risk level without a live chain call. Nullable
+   *  because snapshots recorded before this field existed won't have it. */
+  riskLevel: RiskLevel | null;
 }
 
 /**
@@ -38,6 +43,7 @@ export function recordSnapshot(
   token: `0x${string}`,
   metrics: TokenMetrics,
   score: FletchScore,
+  riskLevel: RiskLevel,
   now: number = Math.floor(Date.now() / 1000)
 ): boolean {
   const db = getDb();
@@ -51,8 +57,8 @@ export function recordSnapshot(
     `INSERT INTO token_snapshots
       (token, taken_at, price_in_pair, liquidity_usd, holder_count, buy_count_window, sell_count_window,
        volume_pair_asset_window, top_holder_concentration_pct, fletch_score, momentum_score, liquidity_score,
-       holder_growth_score, whale_activity_score, safety_score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       holder_growth_score, whale_activity_score, safety_score, risk_level)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     token.toLowerCase(),
     now,
@@ -68,7 +74,8 @@ export function recordSnapshot(
     score.components.liquidity.value,
     score.components.holderGrowth.value,
     score.components.whaleActivity.value,
-    score.components.safety.value
+    score.components.safety.value,
+    riskLevel
   );
   return true;
 }
@@ -99,6 +106,17 @@ export function getSnapshotHistory(token: `0x${string}`, limit = 50): TokenSnaps
   return rows.map(rowToSnapshot);
 }
 
+/** The single most recent snapshot for a token, regardless of age — Meme
+ *  Radar's source for FLETCH Score, risk level, and key metrics without a
+ *  live chain call. Null if this token has never been checked. */
+export function getLatestSnapshot(token: `0x${string}`): TokenSnapshot | null {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT * FROM token_snapshots WHERE token = ? ORDER BY taken_at DESC LIMIT 1`)
+    .get(token.toLowerCase()) as any;
+  return row ? rowToSnapshot(row) : null;
+}
+
 function rowToSnapshot(row: any): TokenSnapshot {
   return {
     takenAt: row.taken_at,
@@ -115,5 +133,6 @@ function rowToSnapshot(row: any): TokenSnapshot {
     holderGrowthScore: row.holder_growth_score,
     whaleActivityScore: row.whale_activity_score,
     safetyScore: row.safety_score,
+    riskLevel: row.risk_level ?? null,
   };
 }

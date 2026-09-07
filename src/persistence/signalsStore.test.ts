@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { useInMemoryDbForTests } from "./db.js";
-import { recordSignal, getRecentSignals, getSignalsForToken } from "./signalsStore.js";
+import { recordSignal, getRecentSignals, getSignalsForToken, getSignalsForTokenSince, getDistinctTokensWithRecentSignals } from "./signalsStore.js";
 import type { Signal } from "../signals/types.js";
 
 const TOKEN_A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
@@ -84,4 +84,36 @@ test("token addresses are matched case-insensitively, same as everywhere else in
   const upper = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" as const;
   const found = getSignalsForToken(upper);
   assert.equal(found.length, 1);
+});
+
+test("getSignalsForTokenSince only returns signals at or after the cutoff, regardless of how much older history exists", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 3600 })); // 1h old — outside the window
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 60 })); // 1m old — inside
+  recordSignal(TOKEN_A, signal({ timestamp: NOW })); // just now — inside
+  const recent = getSignalsForTokenSince(TOKEN_A, NOW - 1800); // 30 min window
+  assert.equal(recent.length, 2);
+  assert.ok(recent.every((s) => s.timestamp >= NOW - 1800));
+});
+
+test("getSignalsForTokenSince never leaks another token's signals", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW }));
+  recordSignal(TOKEN_B, signal({ timestamp: NOW }));
+  const recent = getSignalsForTokenSince(TOKEN_A, NOW - 60);
+  assert.equal(recent.length, 1);
+});
+
+test("getDistinctTokensWithRecentSignals returns each token once, even with multiple recent signals", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW }));
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 10, type: "HOLDER_GROWTH" }));
+  recordSignal(TOKEN_B, signal({ timestamp: NOW }));
+  const tokens = getDistinctTokensWithRecentSignals(NOW - 60);
+  assert.equal(tokens.length, 2);
+  assert.ok(tokens.includes(TOKEN_A));
+  assert.ok(tokens.includes(TOKEN_B));
+});
+
+test("getDistinctTokensWithRecentSignals excludes a token whose only signals are outside the window — a quiet token isn't a radar candidate", () => {
+  recordSignal(TOKEN_A, signal({ timestamp: NOW - 7200 })); // 2h old
+  const tokens = getDistinctTokensWithRecentSignals(NOW - 1800); // 30 min window
+  assert.equal(tokens.length, 0);
 });

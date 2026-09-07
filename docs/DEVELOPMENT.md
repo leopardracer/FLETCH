@@ -35,6 +35,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 |---|---|
 | `GET /api/health` | chain connectivity, Blockscout/poller config state |
 | `GET /api/tokens?window=<blocks>` | Tokens feed — new launches ranked by FLETCH Score |
+| `GET /api/radar?window=<seconds>&limit=<n>` | Meme Radar — tokens ranked by recency-weighted signal convergence, not size (see [docs/RADAR.md](./RADAR.md)) |
 | `GET /api/signals?limit=<n>` | Chain-wide live signal feed, severity then recency |
 | `GET /api/tokens/:address` | full token intelligence: metrics, risk, score, signals, why-it's-moving, data availability |
 | `GET /api/tokens/:address/history` | persisted snapshot history for that token |
@@ -80,7 +81,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 102 tests across 13 files |
+| `npm test` | The full suite — 133 tests across 15 files |
 | `npm run test:integration` | Just the two files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -90,12 +91,13 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalEngine.test.ts` | 12 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all four trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), and that nothing fires without the data to back it |
+| `radar/radarEngine.test.ts` | 13 | every Radar formula constant: per-severity magnitude, recency decay, the convergence multiplier, the 0–100 clamp, and that volume (the same signal repeating) never scores higher than the same signal firing once |
 | `signals/types.test.ts` | 4 | `pickTopSignal` — regression test for a real bug where the API surfaced the first-detected signal instead of the most severe one |
 | `scoring/fletchScore.test.ts` | 11 | every component formula, weight re-normalization when components are unavailable, the whale-activity availability rule (unavailable only when the scan itself failed, not when it found zero whales), the real-vs-proxy holder-growth branch |
 | `risk/riskAnalysis.test.ts` | 10 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history |
-| `persistence/snapshots.test.ts` | 9 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping |
+| `persistence/snapshots.test.ts` | 12 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping, latest-snapshot lookup and risk-level persistence for Meme Radar |
 | `ai/explain.test.ts` | 7 | every bullet traces to a real signal's own text; risk-derived signal types don't get double-shown |
-| `persistence/signalsStore.test.ts` | 7 | severity-then-recency ordering, per-token isolation, case-insensitive addressing |
+| `persistence/signalsStore.test.ts` | 11 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries and distinct-token discovery for Meme Radar |
 | `persistence/walletActivityStore.test.ts` | 6 | profile aggregation, token-breadth dedup, per-wallet isolation |
 | `wallets/walletScore.test.ts` | 5 | every metric is explicitly `NOT_YET_IMPLEMENTED` with a stated reason — never a computed number, even with a long recorded history |
 | `core/config.test.ts` | 8 | env parsing, including a regression test for a real boolean-coercion bug this pass found and fixed (see below) |
@@ -106,7 +108,8 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalService.test.ts` | 10 | the real pipeline — chain metrics → risk → score → signals → persistence — through `analyzeAndPersist`, the one function every real code path (API, poller) calls. Includes signal deduplication: a rapid repeat read must not re-file identical signal rows, but a genuinely later read must |
-| `api/server.test.ts` | 12 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, never a crash or hang) |
+| `radar/radarService.test.ts` | 9 | persisted signals + snapshots → ranked Radar entries through `getRadar()`, the real function the API calls. Sorting, window exclusion, honest nulls when a token has signals but no snapshot yet, and that symbol resolution degrades to `null` instead of throwing without `RPC_URL` |
+| `api/server.test.ts` | 14 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, never a crash or hang) |
 
 **Two real bugs this test pass found and fixed** (not hypothetical — both reproduced before the fix):
 - `ENABLE_POLLER=false` in `.env` was silently ignored. `z.coerce.boolean()` uses JS's `Boolean(value)` coercion, and `Boolean("false")` is `true` — any non-empty string coerces truthy. Fixed with a proper string-aware parser; regression test in `core/config.test.ts`.
@@ -122,7 +125,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-73.93% line coverage / 76.87% branch / 66.42% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+75.89% line coverage / 78.24% branch / 70.20% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|

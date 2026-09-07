@@ -45,7 +45,7 @@ export function analyzeAndPersist(
   // Signals are only persisted alongside a genuinely new snapshot — otherwise a
   // rapid repeat read (same rate-limit window) would re-file identical signal
   // rows every time, even though nothing new was actually observed.
-  const wroteNewSnapshot = recordSnapshot(token, metrics, score, now);
+  const wroteNewSnapshot = recordSnapshot(token, metrics, score, risk.level, now);
   if (wroteNewSnapshot) {
     for (const s of signals) recordSignal(token, s);
   }

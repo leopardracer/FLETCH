@@ -32,7 +32,8 @@ function createSchema(db: DatabaseSync): void {
       liquidity_score INTEGER,
       holder_growth_score INTEGER,
       whale_activity_score INTEGER,
-      safety_score INTEGER
+      safety_score INTEGER,
+      risk_level TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_snapshots_token_time ON token_snapshots(token, taken_at);
 

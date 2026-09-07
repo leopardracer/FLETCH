@@ -42,6 +42,7 @@ function snapshot(overrides: Partial<TokenSnapshot> = {}): TokenSnapshot {
     holderGrowthScore: null,
     whaleActivityScore: null,
     safetyScore: null,
+    riskLevel: null,
     ...overrides,
   };
 }

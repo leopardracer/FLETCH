@@ -40,6 +40,30 @@ export function getSignalsForToken(token: `0x${string}`, limit = 50): StoredSign
   return rows.map(rowToSignal);
 }
 
+/** Every signal for a token within a time window — Meme Radar's input.
+ *  Unlike getSignalsForToken, this is bounded by recency, not row count:
+ *  a token with heavy history doesn't drown out what actually happened
+ *  in the last `sinceTimestamp..now` window. */
+export function getSignalsForTokenSince(token: `0x${string}`, sinceTimestamp: number): StoredSignal[] {
+  const db = getDb();
+  const rows = db
+    .prepare(`SELECT * FROM signals WHERE token = ? AND taken_at >= ? ORDER BY taken_at DESC`)
+    .all(token.toLowerCase(), sinceTimestamp) as any[];
+  return rows.map(rowToSignal);
+}
+
+/** Every distinct token with at least one signal since `sinceTimestamp` —
+ *  Meme Radar's candidate list. A token with zero recent signals never
+ *  appears here, which is deliberate: Radar ranks what's moving, not
+ *  every token FLETCH has ever seen. */
+export function getDistinctTokensWithRecentSignals(sinceTimestamp: number): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare(`SELECT DISTINCT token FROM signals WHERE taken_at >= ?`)
+    .all(sinceTimestamp) as { token: string }[];
+  return rows.map((r) => r.token);
+}
+
 function rowToSignal(row: any): StoredSignal {
   return {
     token: row.token,
