@@ -80,7 +80,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 96 tests across 12 files |
+| `npm test` | The full suite — 102 tests across 13 files |
 | `npm run test:integration` | Just the two files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -90,6 +90,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalEngine.test.ts` | 12 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all four trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), and that nothing fires without the data to back it |
+| `signals/types.test.ts` | 4 | `pickTopSignal` — regression test for a real bug where the API surfaced the first-detected signal instead of the most severe one |
 | `scoring/fletchScore.test.ts` | 11 | every component formula, weight re-normalization when components are unavailable, the whale-activity availability rule (unavailable only when the scan itself failed, not when it found zero whales), the real-vs-proxy holder-growth branch |
 | `risk/riskAnalysis.test.ts` | 10 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history |
 | `persistence/snapshots.test.ts` | 9 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping |
@@ -105,11 +106,13 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalService.test.ts` | 10 | the real pipeline — chain metrics → risk → score → signals → persistence — through `analyzeAndPersist`, the one function every real code path (API, poller) calls. Includes signal deduplication: a rapid repeat read must not re-file identical signal rows, but a genuinely later read must |
-| `api/server.test.ts` | 10 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, never a crash or hang) |
+| `api/server.test.ts` | 12 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, never a crash or hang) |
 
 **Two real bugs this test pass found and fixed** (not hypothetical — both reproduced before the fix):
 - `ENABLE_POLLER=false` in `.env` was silently ignored. `z.coerce.boolean()` uses JS's `Boolean(value)` coercion, and `Boolean("false")` is `true` — any non-empty string coerces truthy. Fixed with a proper string-aware parser; regression test in `core/config.test.ts`.
 - Signal history wasn't deduplicated. Snapshots were correctly rate-limited, but every detected signal was still persisted on every call regardless — three rapid page views wrote three identical `BUY_PRESSURE` rows. Fixed by only persisting signals alongside a genuinely new snapshot.
+
+**One more, found during the product-polish pass:** the `topSignal` field on `GET /api/tokens` rows was `signals[0]` — the first signal detected in the engine's fixed code order (buy/sell pressure, then whale moves, then risk-promoted findings, then trend signals), not the most severe one. A CRITICAL holder-concentration finding could sit unshown behind a LOW buy-pressure signal. Fixed with a dedicated, tested `pickTopSignal()` helper (`signals/types.ts`) that actually sorts by severity — see `signals/types.test.ts`.
 
 ## Coverage
 
@@ -119,7 +122,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-74.30% line coverage / 74.35% branch / 64.44% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+73.93% line coverage / 76.87% branch / 66.42% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|

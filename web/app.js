@@ -24,8 +24,19 @@ function renderNav(active) {
 
 async function getJSON(path) {
   const res = await fetch(API_BASE + path);
-  if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
-  return res.json();
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    // response wasn't JSON at all — fall through to the generic message below
+  }
+  if (!res.ok) {
+    const reason = body && body.error ? body.error : `HTTP ${res.status}`;
+    const err = new Error(reason);
+    err.status = res.status;
+    throw err;
+  }
+  return body;
 }
 
 function fmtAddr(a) {
@@ -43,10 +54,39 @@ function severityChip(level) {
   return `<span class="chip ${level}">${level}</span>`;
 }
 
+/** A compact "why" line for table rows — the top signal's own explanation,
+ *  never a re-derived summary. Omitted entirely when there's no signal yet,
+ *  rather than showing an empty placeholder in every row. */
+function whyLine(topSignal) {
+  if (!topSignal) return "";
+  return `<div class="why-line"><span class="why-dot sev-${topSignal.severity}"></span>${topSignal.explanation}</div>`;
+}
+
 function availabilityBadge(state) {
   const cls = state === "REAL" ? "avail-real" : state === "REQUIRES_API_KEY" ? "avail-key" : "avail-na";
   const label = state === "REQUIRES_API_KEY" ? "REQUIRES API KEY" : state === "NOT_YET_IMPLEMENTED" ? "NOT YET IMPLEMENTED" : state;
   return `<span class="avail-badge ${cls}">${label}</span>`;
+}
+
+/**
+ * One consistent visual language for every "there's nothing to show"
+ * moment, instead of a single grey box for everything:
+ *   unavailable — a capability that needs infrastructure FLETCH doesn't
+ *                  have yet (Smart Money, Social). Won't resolve on its own.
+ *   pending     — real data that just hasn't accumulated yet (signal
+ *                  timeline, score history on a token nobody's checked
+ *                  twice). Will fill in as FLETCH keeps watching.
+ *   empty       — a real check ran and genuinely found nothing right now
+ *                  (no launches in this window, no risk alerts).
+ *   error       — something actually broke.
+ */
+function stateBlock(kind, title, body) {
+  return `<div class="state-block state-${kind}"><div class="state-title">${title}</div>${body ? `<div class="state-body">${body}</div>` : ""}</div>`;
+}
+
+/** A small terminal-style loading indicator — a blinking cursor, not a spinner or skeleton. */
+function loadingLine(label) {
+  return `<div class="loading-line">${label || "loading"}<span class="cursor">▌</span></div>`;
 }
 
 async function renderLiveSignals() {
@@ -55,13 +95,13 @@ async function renderLiveSignals() {
     <div class="section-head">
       <div><h1>Signals</h1><p>Events worth attention across every recently launched token — sorted by severity, then recency. Not a token list.</p></div>
     </div>
-    <div id="live-signals-body" class="empty">loading…</div>
+    <div id="live-signals-body">${loadingLine()}</div>
   `;
   const body = document.getElementById("live-signals-body");
   try {
     const data = await getJSON("/api/signals?limit=80");
     if (!data.signals || data.signals.length === 0) {
-      body.innerHTML = `<div class="empty">No signals recorded yet. Signals accumulate as tokens are viewed or the background poller runs — see docs/DEVELOPMENT.md.</div>`;
+      body.innerHTML = stateBlock("pending", "NOT ENOUGH HISTORY YET", "Signals accumulate as tokens are viewed or the background poller runs.");
       return;
     }
     body.outerHTML = `<div id="live-signals-body">${data.signals
@@ -76,7 +116,7 @@ async function renderLiveSignals() {
       )
       .join("")}</div>`;
   } catch (e) {
-    body.innerHTML = `<div class="error">Couldn't load signals — ${e.message}</div>`;
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD SIGNALS", e.message);
   }
 }
 
@@ -88,11 +128,6 @@ function scoreBadge(score) {
     <span class="score-badge">${score}</span>
     <span class="score-bar-track"><span class="score-bar-fill" style="width:${score}%"></span></span>
   `;
-}
-
-function riskChip(level) {
-  if (!level) return `<span class="chip na">N/A</span>`;
-  return `<span class="chip ${level}">${level}</span>`;
 }
 
 async function checkHealth() {
@@ -120,8 +155,8 @@ async function renderOverview() {
       <div><h1>Overview</h1><p>Everything below comes from the same live feed as Tokens and Signals — filtered differently.</p></div>
     </div>
     <div class="overview-grid" id="overview-body">
-      <div class="panel-block"><h2>Moving now</h2><div class="empty">loading…</div></div>
-      <div class="panel-block"><h2>Risk alerts</h2><div class="empty">loading…</div></div>
+      <div class="panel-block"><h2>Moving now</h2>${loadingLine()}</div>
+      <div class="panel-block"><h2>Risk alerts</h2>${loadingLine()}</div>
     </div>
   `;
   try {
@@ -147,7 +182,7 @@ async function renderOverview() {
                   </div>`
                 )
                 .join("")
-            : `<div class="empty">No launches in the current scan window.</div>`
+            : stateBlock("empty", "NOTHING IN THIS WINDOW", "No launches in the current scan window.")
         }
       </div>
       <div class="panel-block">
@@ -158,11 +193,11 @@ async function renderOverview() {
                 .map(
                   (t) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/token/${t.token}'">
                     <span class="sym">${t.symbol ? "$" + t.symbol : fmtAddr(t.token)}</span>
-                    <span>${riskChip(t.riskLevel)}</span>
+                    <span>${severityChip(t.riskLevel)}</span>
                   </div>`
                 )
                 .join("")
-            : `<div class="empty">No elevated risk findings in the current scan window.</div>`
+            : stateBlock("empty", "NO ALERTS", "No elevated risk findings in the current scan window.")
         }
       </div>
       <div class="panel-block">
@@ -171,26 +206,25 @@ async function renderOverview() {
           recentSignals.length
             ? recentSignals
                 .map(
-                  (sg) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/token/${sg.token}'">
-                    <span class="sym">${sg.symbol ? "$" + sg.symbol : fmtAddr(sg.token)}</span>
-                    <span>${severityChip(sg.severity)}</span>
+                  (sg) => `<div class="mini-row why" style="cursor:pointer" onclick="location.hash='#/token/${sg.token}'">
+                    <span class="why-line" style="margin:0"><span class="why-dot sev-${sg.severity}"></span><b>${sg.symbol ? "$" + sg.symbol : fmtAddr(sg.token)}</b> — ${sg.explanation}</span>
                   </div>`
                 )
                 .join("")
-            : `<div class="empty">No signals recorded yet — see the Signals tab.</div>`
+            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "No signals recorded yet — see the Signals tab.")
         }
       </div>
       <div class="panel-block">
         <h2>Smart Money</h2>
-        <div class="empty">UNAVAILABLE — no cross-token wallet-performance history store or indexer is wired up yet. See docs/DATA.md.</div>
+        ${stateBlock("unavailable", "NOT AVAILABLE", "Requires a cross-token wallet-performance history store or indexer, neither of which is wired up yet. See docs/DATA.md.")}
       </div>
       <div class="panel-block">
         <h2>Social</h2>
-        <div class="empty">UNAVAILABLE — no reliable social-mentions source for Robinhood Chain tokens was found. See docs/DATA.md.</div>
+        ${stateBlock("unavailable", "NOT AVAILABLE", "Requires a social data source. No reliable one for Robinhood Chain tokens was found. See docs/DATA.md.")}
       </div>
     `;
   } catch (e) {
-    document.getElementById("overview-body").innerHTML = `<div class="error">Couldn't load the overview — ${e.message}</div>`;
+    document.getElementById("overview-body").innerHTML = stateBlock("error", "COULDN'T LOAD OVERVIEW", e.message);
   }
 }
 
@@ -200,7 +234,7 @@ async function renderWalletsView() {
     <div class="section-head">
       <div><h1>Wallets</h1><p>Net accumulators across the most recently launched tokens. Scoped per-token — see note on each row; there is no cross-token wallet history yet.</p></div>
     </div>
-    <div id="wallets-body" class="empty">loading…</div>
+    <div id="wallets-body">${loadingLine()}</div>
   `;
   const body = document.getElementById("wallets-body");
   try {
@@ -214,7 +248,7 @@ async function renderWalletsView() {
     );
     const anyWallets = perToken.some((p) => p.wallets.length > 0);
     if (!anyWallets) {
-      body.innerHTML = `<div class="empty">No wallet activity found across the current feed window.</div>`;
+      body.innerHTML = stateBlock("empty", "NO WALLET ACTIVITY", "No wallet activity found across the current feed window.");
       return;
     }
     body.outerHTML = `<div id="wallets-body">${perToken
@@ -241,7 +275,7 @@ async function renderWalletsView() {
       )
       .join("")}</div>`;
   } catch (e) {
-    body.innerHTML = `<div class="error">Couldn't load wallet activity — ${e.message}</div>`;
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD WALLET ACTIVITY", e.message);
   }
 }
 
@@ -251,7 +285,7 @@ async function renderRiskView() {
     <div class="section-head">
       <div><h1>Risk</h1><p>Every token in the current feed window, sorted by risk level — each finding has stated evidence, never a bare "SCAM" label.</p></div>
     </div>
-    <div id="risk-body" class="empty">loading…</div>
+    <div id="risk-body">${loadingLine()}</div>
   `;
   const body = document.getElementById("risk-body");
   const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -259,7 +293,7 @@ async function renderRiskView() {
     const feed = await getJSON("/api/tokens");
     const tokens = [...(feed.tokens || [])].sort((a, b) => (order[a.riskLevel] ?? 9) - (order[b.riskLevel] ?? 9));
     if (!tokens.length) {
-      body.innerHTML = `<div class="empty">No launches in the current scan window.</div>`;
+      body.innerHTML = stateBlock("empty", "NOTHING IN THIS WINDOW", "No launches in the current scan window.");
       return;
     }
     body.outerHTML = `
@@ -269,9 +303,9 @@ async function renderRiskView() {
           ${tokens
             .map(
               (t) => `<tr onclick="location.hash='#/token/${t.token}'">
-                <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span></td>
+                <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
                 <td class="addr">${fmtAddr(t.deployer)}</td>
-                <td>${riskChip(t.riskLevel)}</td>
+                <td>${severityChip(t.riskLevel)}</td>
                 <td>${scoreBadge(t.fletchScore)}</td>
               </tr>`
             )
@@ -279,25 +313,33 @@ async function renderRiskView() {
         </tbody>
       </table>`;
   } catch (e) {
-    body.innerHTML = `<div class="error">Couldn't load risk data — ${e.message}</div>`;
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD RISK DATA", e.message);
   }
 }
 
 function renderDocs() {
   renderNav("docs");
+  const docs = [
+    { file: "ARCHITECTURE.md", desc: "System design and the data-provider abstraction." },
+    { file: "SCORING.md", desc: "Exactly how the FLETCH Score is computed, component by component." },
+    { file: "SIGNALS.md", desc: "What counts as a signal, severity and confidence rules." },
+    { file: "RISK.md", desc: "Every risk finding, its threshold, and its evidence." },
+    { file: "DATA.md", desc: "Where every metric comes from — and what's still unavailable." },
+    { file: "DEVELOPMENT.md", desc: "Setup, environment variables, and the test suite." },
+  ];
   app.innerHTML = `
     <div class="section-head">
-      <div><h1>Docs</h1><p>Documentation lives in the repository, not behind an API.</p></div>
+      <div><h1>Docs</h1><p>Documentation lives in the repository, not behind an API — these open on GitHub.</p></div>
     </div>
-    <div class="panel-block">
-      <ul>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/ARCHITECTURE.md" target="_blank">ARCHITECTURE.md</a> — system design and the data-provider abstraction</li>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/SCORING.md" target="_blank">SCORING.md</a> — exactly how the FLETCH Score is computed</li>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/SIGNALS.md" target="_blank">SIGNALS.md</a> — what counts as a signal and why</li>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/RISK.md" target="_blank">RISK.md</a> — risk levels and evidence rules</li>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/DATA.md" target="_blank">DATA.md</a> — where every metric comes from, and what's still unavailable</li>
-        <li><a href="https://github.com/leopardracer/FLETCH/blob/main/docs/DEVELOPMENT.md" target="_blank">DEVELOPMENT.md</a> — running, testing, and extending FLETCH</li>
-      </ul>
+    <div class="docs-grid">
+      ${docs
+        .map(
+          (d) => `<a class="doc-card" href="https://github.com/leopardracer/FLETCH/blob/main/docs/${d.file}" target="_blank" rel="noopener">
+            <div class="doc-card-name">${d.file}</div>
+            <div class="doc-card-desc">${d.desc}</div>
+          </a>`
+        )
+        .join("")}
     </div>
   `;
 }
@@ -311,23 +353,23 @@ async function renderFeed() {
         <p>New Pons V2 launches on Robinhood Chain, ranked by FLETCH Score — not market cap. For the live event stream, see the Signals tab.</p>
       </div>
     </div>
-    <div id="feed-body" class="empty">loading…</div>
+    <div id="feed-body">${loadingLine()}</div>
   `;
   const body = document.getElementById("feed-body");
   try {
     const data = await getJSON("/api/tokens");
     if (!data.tokens || data.tokens.length === 0) {
-      body.innerHTML = `<div class="empty">No launches found in the scanned window. Widen the window or check back after more chain activity.</div>`;
+      body.innerHTML = stateBlock("empty", "NOTHING IN THIS WINDOW", "No launches found in the scanned window. Widen the window or check back after more chain activity.");
       return;
     }
     const rows = data.tokens
       .map(
         (t) => `
       <tr onclick="location.hash='#/token/${t.token}'">
-        <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span></td>
+        <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
         <td class="addr">${fmtAddr(t.deployer)}</td>
         <td>${t.devBuyPercent !== null ? t.devBuyPercent.toFixed(1) + "%" : "—"}</td>
-        <td>${riskChip(t.riskLevel)}</td>
+        <td>${severityChip(t.riskLevel)}</td>
         <td>${scoreBadge(t.fletchScore)}</td>
       </tr>`
       )
@@ -340,20 +382,29 @@ async function renderFeed() {
         <tbody>${rows}</tbody>
       </table>`;
   } catch (e) {
-    body.innerHTML = `<div class="error">Couldn't load the feed — ${e.message}. Is the API running and RPC_URL configured?</div>`;
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD THE FEED", `${e.message} — is the API running and RPC_URL configured?`);
   }
 }
 
 function componentBlock(name, comp) {
   if (comp.value === null) {
-    return `<div class="component"><div class="name">${name}</div><div class="val na">unavailable — ${comp.reason}</div></div>`;
+    return `<div class="component na">
+      <div class="name">${name}</div>
+      <div class="val na">N/A</div>
+      <div class="sub">${comp.reason}</div>
+    </div>`;
   }
-  return `<div class="component"><div class="name">${name}</div><div class="val">${comp.value}</div><div class="sub">${comp.label}</div></div>`;
+  return `<div class="component">
+    <div class="name">${name}</div>
+    <div class="val">${comp.value}</div>
+    <div class="component-bar-track"><div class="component-bar-fill" style="width:${comp.value}%"></div></div>
+    <div class="sub">${comp.label}</div>
+  </div>`;
 }
 
 async function renderToken(address) {
   renderNav(null);
-  app.innerHTML = `<a class="back" onclick="location.hash='#/'">&larr; back to feed</a><div class="empty">loading ${fmtAddr(address)}…</div>`;
+  app.innerHTML = `<a class="back" onclick="location.hash='#/'">&larr; back to feed</a>${loadingLine(fmtAddr(address))}`;
   try {
     const [d, walletsRes, historyRes, signalsRes] = await Promise.all([
       getJSON(`/api/tokens/${address}`),
@@ -443,7 +494,7 @@ async function renderToken(address) {
                   </div>`
                 )
                 .join("")}</div>`
-            : `<div class="empty">No signals recorded yet for this token — they accumulate as this page is viewed or the background poller runs.</div>`
+            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "Signals accumulate as this page is viewed or the background poller runs.")
         }
       </div>
 
@@ -466,26 +517,18 @@ async function renderToken(address) {
                     .join("")}
                 </tbody>
               </table>`
-            : `<div class="empty">Not enough history yet — score history builds up as this token is checked over time (page views or the background poller).</div>`
+            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "Score history builds up as this token is checked over time (page views or the background poller).")
         }
       </div>
 
       <div class="panel-block">
         <h2>Smart Money</h2>
-        ${
-          d.smartMoney.available
-            ? `<div class="empty">Smart-money wallets available — rendering not yet built for this response shape.</div>`
-            : `<div class="empty">UNAVAILABLE — ${d.smartMoney.reason}</div>`
-        }
+        ${stateBlock("unavailable", "NOT AVAILABLE", d.smartMoney.reason)}
       </div>
 
       <div class="panel-block">
         <h2>Social</h2>
-        ${
-          d.social.available
-            ? `<div class="empty">Social signal available — rendering not yet built for this response shape.</div>`
-            : `<div class="empty">UNAVAILABLE — ${d.social.reason}</div>`
-        }
+        ${stateBlock("unavailable", "NOT AVAILABLE", d.social.reason)}
       </div>
 
       <div class="panel-block">
@@ -506,18 +549,21 @@ async function renderToken(address) {
                     .join("")}
                 </tbody>
               </table>`
-            : `<div class="empty">No wallet activity found for this token yet.</div>`
+            : stateBlock("empty", "NO WALLET ACTIVITY", "No holders found in the current scan window.")
         }
       </div>
     `;
   } catch (e) {
-    app.innerHTML = `<a class="back" onclick="location.hash='#/'">&larr; back to feed</a><div class="error">Couldn't load this token — ${e.message}</div>`;
+    const notFound = e.status === 404;
+    app.innerHTML = `
+      <a class="back" onclick="location.hash='#/'">&larr; back to feed</a>
+      ${stateBlock(notFound ? "unavailable" : "error", notFound ? "TOKEN NOT FOUND" : "COULDN'T LOAD THIS TOKEN", e.message)}`;
   }
 }
 
 async function renderWalletDetail(address) {
   renderNav(null);
-  app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a><div class="empty">loading ${fmtAddr(address)}…</div>`;
+  app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${loadingLine(fmtAddr(address))}`;
   try {
     const w = await getJSON(`/api/wallets/${address}`);
     const metricRows = Object.entries(w.metrics)
@@ -539,7 +585,7 @@ async function renderWalletDetail(address) {
                <div class="mini-row"><span>First seen</span><span>${fmtTime(w.profile.firstSeenAt)}</span></div>
                <div class="mini-row"><span>Last seen</span><span>${fmtTime(w.profile.lastSeenAt)}</span></div>
                <div class="mini-row"><span>Records</span><span>${w.profile.totalRecords}</span></div>`
-            : `<div class="empty">No recorded activity for this wallet yet.</div>`
+            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "No recorded activity for this wallet yet.")
         }
       </div>
       <div class="panel-block">
@@ -549,7 +595,7 @@ async function renderWalletDetail(address) {
       </div>
     `;
   } catch (e) {
-    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a><div class="error">Couldn't load this wallet — ${e.message}</div>`;
+    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${stateBlock("error", "COULDN'T LOAD THIS WALLET", e.message)}`;
   }
 }
 

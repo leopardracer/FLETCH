@@ -12,10 +12,13 @@ import { getSocialSignalForToken } from "../social/social.js";
 import { getWalletIntelligence } from "../wallets/walletScore.js";
 import { explainWhyItsMoving } from "../ai/explain.js";
 import { analyzeAndPersist } from "../signals/signalService.js";
+import { pickTopSignal } from "../signals/types.js";
 import { getSnapshotHistory } from "../persistence/snapshots.js";
 import { getRecentSignals, getSignalsForToken } from "../persistence/signalsStore.js";
 
 const provider = new RpcChainDataProvider();
+
+const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
 export function createServer() {
   const app = express();
@@ -25,6 +28,17 @@ export function createServer() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const webDir = path.resolve(__dirname, "../../web");
   app.use(express.static(webDir));
+
+  // Applies to every route with an :address param (tokens, wallets) — one
+  // place to reject a malformed address with a clear, specific message
+  // instead of letting it reach viem and produce a raw, unfriendly error.
+  app.param("address", (req, res, next, value) => {
+    if (!ADDRESS_RE.test(value)) {
+      res.status(400).json({ error: `Invalid address: "${value}" — expected a 20-byte hex address like 0x1234...abcd` });
+      return;
+    }
+    next();
+  });
 
   app.get("/api/health", async (_req, res) => {
     const chain = await pingChain();
@@ -54,7 +68,7 @@ export function createServer() {
             devBuyPercent: devBuyPercentOfCurveSupply(launch.devBuyTokens),
             riskLevel: analysis?.risk.level ?? null,
             fletchScore: analysis?.score.overall ?? null,
-            topSignal: analysis?.signals[0] ?? null,
+            topSignal: analysis ? pickTopSignal(analysis.signals) : null,
           };
         })
       );
@@ -93,7 +107,14 @@ export function createServer() {
   app.get("/api/tokens/:address", async (req, res) => {
     try {
       const address = req.params.address as `0x${string}`;
-      const [info, metrics] = await Promise.all([readTokenInfo(address), provider.getTokenMetrics(address)]);
+      const info = await readTokenInfo(address);
+
+      if (!info.contractExists) {
+        res.status(404).json({ error: `No contract found at ${address} on Robinhood Chain (chain ID ${config.chainId}).` });
+        return;
+      }
+
+      const metrics = await provider.getTokenMetrics(address);
 
       const launches = await scanRecentLaunches(50_000n);
       const launch = launches.find((l) => l.token.toLowerCase() === address.toLowerCase()) ?? null;

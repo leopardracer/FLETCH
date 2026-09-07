@@ -32,3 +32,16 @@ export interface Signal {
   blockNumber?: string;
   timestamp: number; // unix seconds
 }
+
+const SEVERITY_RANK: Record<SignalSeverity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+/**
+ * The single most severity-worthy signal from a batch, for UI contexts
+ * that can only show one (a feed row, an overview card) — never just
+ * "the first one detected," which is an arbitrary code-order artifact,
+ * not a ranking. Ties keep their relative detection order (stable sort).
+ */
+export function pickTopSignal(signals: Signal[]): Signal | null {
+  if (signals.length === 0) return null;
+  return [...signals].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])[0];
+}

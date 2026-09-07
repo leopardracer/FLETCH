@@ -111,9 +111,28 @@ test("an unknown route responds 404, not a 500 or a hang", async () => {
   assert.equal(res.status, 404);
 });
 
-test("a malformed token address is accepted as a string (no format validation today) and still returns a structured response, not a crash", async () => {
+test("a malformed token address is rejected with a clear 400 before it ever reaches a chain call — this used to silently fall through", async () => {
   const res = await fetch(`${baseUrl}/api/tokens/not-a-real-address/history`);
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 400);
   const body = await res.json();
-  assert.deepEqual(body.snapshots, []);
+  assert.match(body.error, /Invalid address/);
+});
+
+test("address validation applies consistently across every :address route, not just one endpoint", async () => {
+  const paths = [
+    `/api/tokens/not-a-real-address`,
+    `/api/tokens/not-a-real-address/signals`,
+    `/api/tokens/not-a-real-address/wallets`,
+    `/api/wallets/not-a-real-address`,
+    `/api/tokens/0x123/history`, // too short to be a real address
+  ];
+  for (const p of paths) {
+    const res = await fetch(`${baseUrl}${p}`);
+    assert.equal(res.status, 400, `expected 400 for ${p}, got ${res.status}`);
+  }
+});
+
+test("a well-formed address is accepted and reaches the real route logic (fails on missing RPC, not on address format)", async () => {
+  const res = await fetch(`${baseUrl}/api/tokens/${TOKEN}/history`);
+  assert.equal(res.status, 200);
 });

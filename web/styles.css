@@ -102,6 +102,30 @@ a { color: inherit; }
 }
 .mini-row:last-child { border-bottom: none; }
 .mini-row .sym { font-weight: 600; }
+.mini-row.why { display: block; padding: 8px 0; }
+
+.why-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.4;
+}
+.mini-row.why .why-line { font-size: 13px; color: var(--ink); }
+.why-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: var(--ink-faint);
+}
+.why-dot.sev-LOW { background: var(--green); }
+.why-dot.sev-MEDIUM { background: var(--amber); }
+.why-dot.sev-HIGH { background: var(--red); }
+.why-dot.sev-CRITICAL { background: var(--red); box-shadow: 0 0 6px var(--red); }
 
 .signal-row {
   display: grid;
@@ -227,13 +251,51 @@ table.feed tbody tr:hover { background: var(--panel-raised); }
 .chip.CRITICAL { color: #fff; background: var(--red); border-color: var(--red); }
 .chip.na { color: var(--ink-faint); border-color: var(--line); }
 
-.empty, .error {
+.state-block {
+  padding: 18px 20px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+.state-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.state-body {
+  font-size: 13px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+.state-empty { border-style: dashed; }
+.state-empty .state-title { color: var(--ink-faint); }
+.state-pending { border-color: rgba(217,103,12,0.3); }
+.state-pending .state-title { color: var(--orange-bright); }
+.state-unavailable { border-style: dashed; }
+.state-unavailable .state-title { color: var(--ink-faint); }
+.state-error { border-color: rgba(198,92,74,0.45); }
+.state-error .state-title { color: var(--red); }
+
+.loading-line {
   padding: 40px 20px;
   text-align: center;
   color: var(--ink-faint);
+  font-family: var(--mono);
   font-size: 13px;
+  letter-spacing: 0.02em;
 }
-.error { color: var(--red); }
+.loading-line .cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--orange-bright);
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
 
 /* --- token detail --- */
 .back {
@@ -316,13 +378,108 @@ table.feed tbody tr:hover { background: var(--panel-raised); }
   border-radius: 5px;
   padding: 10px 12px;
 }
+.component.na { border: 1px dashed var(--line); background: transparent; }
 .component .name { font-size: 11px; color: var(--ink-faint); text-transform: none; }
 .component .val { font-family: var(--mono); font-size: 18px; margin-top: 2px; }
-.component .val.na { font-size: 11px; color: var(--ink-faint); font-style: italic; }
+.component .val.na { font-size: 13px; color: var(--ink-faint); font-style: italic; }
+.component .sub { font-size: 11px; color: var(--ink-faint); margin-top: 4px; line-height: 1.4; }
+.component-bar-track {
+  width: 100%;
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.component-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--orange), var(--orange-bright));
+}
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.doc-card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+  text-decoration: none;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.doc-card:hover { border-color: var(--orange); background: var(--panel-raised); }
+.doc-card-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--orange-bright);
+  margin-bottom: 4px;
+}
+.doc-card-desc { font-size: 12.5px; color: var(--ink-dim); line-height: 1.4; }
 
 footer {
   padding: 24px 28px 40px;
   color: var(--ink-faint);
   font-size: 12px;
   text-align: center;
+}
+
+/* ============================================================
+   Responsive — tablet and mobile. Additive only: nothing above
+   this block changes for desktop. Tables scroll horizontally
+   rather than being rebuilt as cards — the existing product,
+   made robust, not redesigned.
+   ============================================================ */
+
+@media (max-width: 900px) {
+  main { padding: 20px 16px; }
+  .topbar { padding: 16px 16px 12px; }
+  .navbar { padding: 0 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .navlink { white-space: nowrap; }
+
+  .overview-grid { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .docs-grid { grid-template-columns: 1fr; }
+
+  .detail-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .score-big { text-align: left; }
+}
+
+@media (max-width: 640px) {
+  .tagline { display: none; } /* status pip + short label still visible; full sentence is redundant on a narrow header */
+  .status { font-size: 11px; }
+
+  .grid { grid-template-columns: 1fr; }
+  .components { gap: 8px; }
+  .component { flex-basis: 100%; }
+
+  .detail-head h1 { font-size: 21px; }
+  .score-big .num { font-size: 32px; }
+
+  /* Tables: horizontal scroll instead of squeezed/overflowing columns */
+  table.feed { display: block; overflow-x: auto; white-space: nowrap; }
+  table.feed thead, table.feed tbody, table.feed tr { display: table; width: 100%; table-layout: fixed; }
+
+  /* Signal rows use a fixed-width grid on desktop — on mobile, stack
+     time/token/severity on one line and let evidence wrap full-width
+     below it, instead of overflowing the fixed column widths. */
+  .signal-row {
+    display: block;
+    padding: 10px 4px;
+  }
+  .signal-row .signal-time,
+  .signal-row .signal-token,
+  .signal-row .signal-type {
+    display: inline-block;
+    margin-right: 10px;
+  }
+  .signal-row .signal-evidence {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .why-line { font-size: 11.5px; }
 }
