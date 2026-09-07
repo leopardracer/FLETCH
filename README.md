@@ -51,6 +51,26 @@ flowchart LR
 
 Full breakdown, including why the data-provider boundary exists and what it unlocks later: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
+## Watch it run
+
+<p align="center">
+  <img src="./assets/watch-it-run.png" alt="Real terminal output: FLETCH booting the API and responding to two real requests" width="100%">
+</p>
+
+Real terminal output — `npm run dev` booting the actual API, then two real requests against it: a health check, and a malformed address. No RPC connection is configured in this capture, and FLETCH says exactly that instead of pretending otherwise. That's the whole point of the project.
+
+**FLETCH starts with the chain, not the chart.**
+
+Launches, trades, holders, liquidity, and whale activity are read directly off Robinhood Chain — not scraped, not estimated. Those reads feed a risk engine and a signal engine that run on every check, and both feed into the FLETCH Score. None of that is optional or mocked: turn off `RPC_URL` and the app tells you so, the way it just did above, instead of drawing a chart from nothing.
+
+The pipeline, in order:
+
+**launch → trades → holders → liquidity → wallets → signals → risk → score**
+
+The full diagram is above, in [How it works](#how-it-works). The exact rule for each stage — what counts as a signal, what triggers a risk finding, how the score is weighted — is written down in [docs/SIGNALS.md](./docs/SIGNALS.md), [docs/RISK.md](./docs/RISK.md), and [docs/SCORING.md](./docs/SCORING.md).
+
+Point it at a live RPC endpoint and the dashboard screenshots itself: `npm run screenshot` (see [Quick Start](#quick-start)) captures the real, populated UI once there's real chain activity to show. Nothing here was staged with fake tokens to look more impressive.
+
 ## Early Signals
 
 The discovery feed scans the Pons V2 factory for every `TokenLaunched` event and ranks by FLETCH Score — not market cap, not recency. Age, dev-buy %, risk level, and score all come from the same real chain reads.
