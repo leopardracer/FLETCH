@@ -1,0 +1,29 @@
+{
+  "name": "fletch",
+  "version": "0.1.0",
+  "description": "FLETCH — the meme intelligence layer for Robinhood Chain. Real onchain data, explainable scoring, no fabricated signals.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json && node dist/index.js",
+    "start": "node dist/index.js",
+    "test": "tsc -p tsconfig.json && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "viem": "^2.21.0",
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.5.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
