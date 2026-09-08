@@ -1,9 +1,5 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { useInMemoryDbForTests } from "../persistence/db.js";
-import { recordSignal } from "../persistence/signalsStore.js";
-import { recordSnapshot } from "../persistence/snapshots.js";
-import { getRadar } from "./radarService.js";
 import type { Signal } from "../signals/types.js";
 import type { TokenMetrics } from "../data/types.js";
 import type { FletchScore } from "../scoring/fletchScore.js";
@@ -13,9 +9,33 @@ import type { FletchScore } from "../scoring/fletchScore.js";
  * entries, through the real getRadar() every real code path (the API)
  * calls. No live RPC needed for ranking — only symbol/name resolution
  * touches the chain client, and that's wrapped in .catch(() => null) the
- * same way the rest of the app degrades without RPC_URL, so these run
- * fully offline against an in-memory database.
+ * same way the rest of the app degrades without RPC_URL.
+ *
+ * RPC_URL is forced empty BEFORE the first import of anything that
+ * transitively reaches core/config.ts — same isolation pattern as
+ * api/server.test.ts. That means EVERY such import must be dynamic
+ * (deferred with `await import(...)` after the env overrides below),
+ * not just radarService.js itself: persistence/db.ts also imports
+ * config.ts, and a static top-of-file import of it (as this file
+ * originally had, for useInMemoryDbForTests/recordSignal/recordSnapshot)
+ * resolves and executes BEFORE any of this module's own top-level code
+ * runs — including the env overrides — because ES module static imports
+ * are always fully evaluated first, regardless of source order.
+ *
+ * Caught during live-RPC validation: with a real RPC_URL in the
+ * developer's own .env, this file was ~20x slower (8s vs 0.4s) because
+ * of exactly this — the *first* fix (making only radarService.js
+ * dynamic) looked right but didn't actually work, since the still-static
+ * persistence/db.ts import had already locked in config.rpcUrl from the
+ * real .env before the "fix" ever ran.
  */
+process.env.RPC_URL = "";
+process.env.DB_PATH = ":memory:";
+
+const { getRadar } = await import("./radarService.js");
+const { useInMemoryDbForTests } = await import("../persistence/db.js");
+const { recordSignal } = await import("../persistence/signalsStore.js");
+const { recordSnapshot } = await import("../persistence/snapshots.js");
 
 const TOKEN_A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
 const TOKEN_B = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
@@ -67,6 +87,11 @@ const CLEAN_SCORE: FletchScore = {
   },
   weightsUsed: {},
 };
+
+test("this file's chain-reaching test isolation actually holds — RPC_URL reads empty here, not whatever's in a real .env", async () => {
+  const { config } = await import("../core/config.js");
+  assert.equal(config.rpcUrl, "");
+});
 
 test("a token with no recent signals never appears on radar", async () => {
   const radar = await getRadar(1800, NOW);
