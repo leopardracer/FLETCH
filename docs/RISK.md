@@ -24,6 +24,8 @@ Each finding carries a `RiskFindingCode` — this is what lets the signal engine
 | `SERIAL_DEPLOYER` | 2–4 launches | MEDIUM |
 | `REDUCED_DEV_TAX` | dev's own buy paid less than the standard opening tax | MEDIUM |
 
+**On launch enrichment failure:** the bundled-wallet check (and dev-buy %) require two extra chain reads per launch, made right after the initial factory scan (see `chain/hunt.ts`'s `enrichOneLaunch`). Against a rate-limited public RPC, this is the read most likely to fail when several launches need checking in one discovery cycle. On failure, `exemptWalletCount`/`devBuyTokens`/`devBuyTaxBps` are `null` — genuinely unknown — and `BUNDLED_WALLETS`/`DEV_BUY`/`REDUCED_DEV_TAX` simply don't fire for that launch. This is deliberate: missing data is never treated as a negative signal. The launch itself is still real and still enters the monitoring queue; it just didn't get its launch-moment enrichment this cycle.
+
 **Ongoing, point-in-time** (from live holder/liquidity/whale metrics):
 
 | Code | Trigger | Level |

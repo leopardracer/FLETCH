@@ -63,7 +63,11 @@ export function analyzeRisk(
       }
     }
 
-    if (launch.exemptWalletCount > 0) {
+    // null means the bundled-wallet check itself couldn't be read (e.g.
+    // rate-limited at launch discovery) — genuinely unknown, not "zero
+    // exempt wallets confirmed", so no finding is raised either way. Per
+    // the project's own rule: missing data is never a negative signal.
+    if (launch.exemptWalletCount !== null && launch.exemptWalletCount > 0) {
       findings.push({
         level: launch.exemptWalletCount >= 3 ? "HIGH" : "MEDIUM",
         code: "BUNDLED_WALLETS",

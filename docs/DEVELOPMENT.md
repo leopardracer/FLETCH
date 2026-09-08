@@ -83,7 +83,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 182 tests across 18 files |
+| `npm test` | The full suite — 201 tests across 20 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -93,10 +93,12 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalEngine.test.ts` | 16 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), `PHASE_CHANGE`, the phase-transition guard on liquidity signals, and that nothing fires without the data to back it |
+| `chain/hunt.test.ts` | 5 | `enrichOneLaunch`'s resilience — a failed per-launch enrichment (e.g. RPC rate-limit) returns a real launch with null dev-buy/exempt-wallet fields, never drops the launch, never fabricates a zero |
+| `api/jsonSafe.test.ts` | 9 | `bigIntSafe` — the exact `whaleMoves` and `pingChain()` shapes that crashed `JSON.stringify` in live testing, proven fixed |
 | `radar/radarEngine.test.ts` | 13 | every Radar formula constant: per-severity magnitude, recency decay, the convergence multiplier, the 0–100 clamp, and that volume (the same signal repeating) never scores higher than the same signal firing once |
 | `signals/types.test.ts` | 4 | `pickTopSignal` — regression test for a real bug where the API surfaced the first-detected signal instead of the most severe one |
 | `scoring/fletchScore.test.ts` | 11 | every component formula, weight re-normalization when components are unavailable, the whale-activity availability rule (unavailable only when the scan itself failed, not when it found zero whales), the real-vs-proxy holder-growth branch |
-| `risk/riskAnalysis.test.ts` | 12 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history, and the phase-transition guard suppressing a false "collapse" across a graduation |
+| `risk/riskAnalysis.test.ts` | 13 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history, and the phase-transition guard suppressing a false "collapse" across a graduation |
 | `persistence/snapshots.test.ts` | 16 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping, latest-snapshot lookup, risk-level and phase persistence, retention pruning, and recent-activity counts |
 | `ai/explain.test.ts` | 7 | every bullet traces to a real signal's own text; risk-derived signal types don't get double-shown |
 | `persistence/signalsStore.test.ts` | 14 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries, distinct-token discovery for Meme Radar, retention pruning, and recent-activity counts |
@@ -111,10 +113,10 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | File | Tests | Covers |
 |---|---|---|
 | `signals/signalService.test.ts` | 10 | the real pipeline — chain metrics → risk → score → signals → persistence — through `analyzeAndPersist`, the one function every real code path (API, monitoring) calls. Includes signal deduplication: a rapid repeat read must not re-file identical signal rows, but a genuinely later read must |
-| `radar/radarService.test.ts` | 9 | persisted signals + snapshots → ranked Radar entries through `getRadar()`, the real function the API calls. Sorting, window exclusion, honest nulls when a token has signals but no snapshot yet, and that symbol resolution degrades to `null` instead of throwing without `RPC_URL` |
+| `radar/radarService.test.ts` | 10 | persisted signals + snapshots → ranked Radar entries through `getRadar()`, the real function the API calls. Sorting, window exclusion, honest nulls when a token has signals but no snapshot yet, and that symbol resolution degrades to `null` instead of throwing without `RPC_URL` |
 | `monitoring/monitoringService.test.ts` | 17 | discovery → queue → bounded monitoring cycle → `analyzeAndPersist`, using dependency-injected fake providers (never live RPC): successful checks persisting real snapshots, failed checks never writing fake metrics, the consecutive-failure cutoff, one broken token never blocking the rest of a batch, and every priority tier |
 | `monitoring/monitoringService.stress.test.ts` | 3 | the scheduler at 100 and 1,000 fake monitored tokens — real (not just configured) bounded concurrency, zero duplicate work, and discovery capped at `MAX_MONITORED_TOKENS` even with 1,000 simultaneous launches. Explicitly does not claim 10,000-token support — see [docs/MONITORING.md#scale](./MONITORING.md#scale) |
-| `api/server.test.ts` | 15 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, and that `/api/monitoring` never leaks a secret) |
+| `api/server.test.ts` | 18 | end-to-end smoke tests — boots the real Express app, hits it over real HTTP, checks every endpoint responds correctly (including graceful, clear errors when RPC isn't configured, and that `/api/monitoring` never leaks a secret) |
 
 **Bugs this project's test-writing has found and fixed** (not hypothetical — each reproduced before the fix):
 - `ENABLE_POLLER=false` in `.env` was silently ignored. `z.coerce.boolean()` uses JS's `Boolean(value)` coercion, and `Boolean("false")` is `true` — any non-empty string coerces truthy. Fixed with a proper string-aware parser; regression test in `core/config.test.ts`.

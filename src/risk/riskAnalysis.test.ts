@@ -59,6 +59,12 @@ test("bundled/exempt wallets escalate with count — 3+ is HIGH, fewer is MEDIUM
   assert.equal(high.findings.find((f) => /exempt/.test(f.evidence))?.level, "HIGH");
 });
 
+test("REGRESSION: exemptWalletCount: null (enrichment failed, e.g. rate-limited) never raises a BUNDLED_WALLETS finding — missing data is not a negative signal", () => {
+  const r = analyzeRisk(launch({ exemptWalletCount: null }), null);
+  assert.equal(r.findings.some((f) => f.code === "BUNDLED_WALLETS"), false);
+  assert.equal(r.level, "LOW"); // no other findings triggered either, from a clean-otherwise launch
+});
+
 test("serial deployer count feeds a finding with the real count in the evidence", () => {
   const r = analyzeRisk(launch({ deployerLaunchCountInWindow: 7 }), null);
   const f = r.findings.find((x) => /serial deployer/.test(x.evidence));
