@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../core/config.js";
-import { pingChain } from "../chain/client.js";
+import { pingChain, type ChainPingResult } from "../chain/client.js";
 import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
 import { scanRecentLaunches, devBuyPercentOfCurveSupply } from "../chain/hunt.js";
 import { readTokenInfo } from "../chain/token.js";
@@ -20,8 +20,21 @@ import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
 import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
 import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
+import { bigIntSafe } from "./jsonSafe.js";
 
 const provider = new RpcChainDataProvider();
+
+/**
+ * Extracted from the /api/health handler so it can be unit-tested
+ * directly with a fake bigint-bearing ChainPingResult, without needing a
+ * live RPC connection to exercise pingChain()'s success path (the test
+ * suite runs with RPC_URL unset, so it never naturally reaches that
+ * branch — see api/server.test.ts for exactly this test). This is the
+ * literal function the real handler calls, not a re-implementation.
+ */
+export function buildHealthResponse(chain: ChainPingResult, blockscoutConfigured: boolean, pollerEnabled: boolean) {
+  return { ok: chain.ok, chain: bigIntSafe(chain), blockscoutConfigured, pollerEnabled };
+}
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -46,8 +59,16 @@ export function createServer() {
   });
 
   app.get("/api/health", async (_req, res) => {
-    const chain = await pingChain();
-    res.json({ ok: chain.ok, chain, blockscoutConfigured: config.hasBlockscout(), pollerEnabled: config.enablePoller });
+    try {
+      const chain = await pingChain();
+      res.json(buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller));
+    } catch (e: any) {
+      // Every other handler in this file already has this — /api/health was
+      // the one exception, which is exactly why a bigint reaching res.json()
+      // here took down the whole process instead of returning a clean 500
+      // like it would have everywhere else. See jsonSafe.ts.
+      res.status(500).json({ error: e?.message ?? "unknown error" });
+    }
   });
 
   // Is FLETCH actually watching the chain right now? See
@@ -178,7 +199,7 @@ export function createServer() {
 
       res.json({
         token: { address, symbol: info.symbol, name: info.name, contractExists: info.contractExists },
-        metrics,
+        metrics: bigIntSafe(metrics),
         risk,
         fletchScore: score,
         signals,

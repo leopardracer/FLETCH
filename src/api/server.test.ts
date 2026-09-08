@@ -22,7 +22,7 @@ process.env.BLOCKSCOUT_API_KEY = "";
 process.env.DB_PATH = ":memory:";
 process.env.ENABLE_POLLER = "false";
 
-const { createServer } = await import("./server.js");
+const { createServer, buildHealthResponse } = await import("./server.js");
 
 let server: Server;
 let baseUrl: string;
@@ -51,6 +51,31 @@ test("GET /api/health responds 200 and honestly reports RPC as unconfigured — 
   assert.match(body.chain.reason, /RPC_URL is not set/);
   assert.equal(body.blockscoutConfigured, false);
   assert.equal(body.pollerEnabled, false);
+});
+
+test("REGRESSION: buildHealthResponse (the exact function GET /api/health calls) never throws on a real bigint block number — this crashed the entire process in live testing", () => {
+  // This test suite runs with RPC_URL unset (see the top of this file), so
+  // pingChain()'s real success branch — the one that returns an actual
+  // bigint block number from viem — is never exercised through a live
+  // HTTP request here. buildHealthResponse is the literal code the real
+  // handler calls with that result, so testing it directly with the exact
+  // shape pingChain() returns on success is testing the real fix, not a
+  // re-implementation of it.
+  const fakeSuccessfulPing = { ok: true as const, blockNumber: 4_829_301n };
+  const response = buildHealthResponse(fakeSuccessfulPing, true, true);
+
+  assert.doesNotThrow(() => JSON.stringify(response)); // this exact line is what crashed the process before the fix
+  const parsed = JSON.parse(JSON.stringify(response));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.chain.blockNumber, "4829301");
+  assert.equal(typeof parsed.chain.blockNumber, "string");
+});
+
+test("REGRESSION: buildHealthResponse still reports a real failure normally — the fix didn't change the ok:false shape", () => {
+  const response = buildHealthResponse({ ok: false, reason: "RPC_URL is not set in .env" }, false, false);
+  assert.equal(response.ok, false);
+  assert.equal((response.chain as { reason: string }).reason, "RPC_URL is not set in .env");
+  assert.doesNotThrow(() => JSON.stringify(response));
 });
 
 test("GET /api/signals responds 200 with an empty feed on a fresh database — not an error", async () => {
@@ -111,6 +136,12 @@ test("GET /api/tokens fails gracefully (500 with a clear reason) when RPC isn't 
 });
 
 test("GET /api/tokens/:address (full token page) also fails gracefully without RPC, for the same reason", async () => {
+  // Also exercises the code path around bigIntSafe(metrics) — see
+  // jsonSafe.test.ts for the direct unit tests proving that
+  // TokenMetrics.whaleMoves[].blockNumber (a real bigint) serializes
+  // safely; a live whale-move-bearing token isn't reachable from this
+  // offline suite, so the exact transformation is tested directly there
+  // instead of re-derived here.
   const res = await fetch(`${baseUrl}/api/tokens/${TOKEN}`);
   assert.equal(res.status, 500);
   const body = await res.json();

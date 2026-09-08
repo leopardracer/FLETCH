@@ -21,7 +21,9 @@ export function getClient() {
   return _client;
 }
 
-export async function pingChain(): Promise<{ ok: true; blockNumber: bigint } | { ok: false; reason: string }> {
+export type ChainPingResult = { ok: true; blockNumber: bigint } | { ok: false; reason: string };
+
+export async function pingChain(): Promise<ChainPingResult> {
   try {
     const client = getClient();
     const blockNumber = await client.getBlockNumber();
