@@ -235,7 +235,9 @@ Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-ste
 4. Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate
 5. Decide on a social data source, or keep it honestly unavailable
 6. Wallet-clustering detection off existing transfer data
-7. Batch per-launch RPC calls in the feed endpoint via multicall
+7. Batch the feed endpoint's per-launch RPC calls via multicall
+8. Automatic reactivation of a `FAILED` monitored token after a longer cool-off, instead of requiring a process restart
+9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice
 
 ## Built on
 
