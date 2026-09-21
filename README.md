@@ -108,6 +108,12 @@ FLETCH doesn't wait for someone to open a token page. A durable, prioritized mon
 
 > **THE CHAIN MOVES FIRST. FLETCH FINDS IT.**
 
+<p align="center">
+  <img src="./assets/radar-race.gif" alt="DEMO — six example tokens racing on Radar score as signals arrive; not real chain data" width="100%">
+</p>
+
+*DEMO — six invented example tokens, not real addresses or real signal history. The mechanism is real (recency-weighted convergence, see below); the race itself is illustrative shape only, same as every other `DEMO`-labeled block in this README — see [Demo](#demo).*
+
 The Tokens feed ranks by FLETCH Score. Radar ranks by something different: how much is changing *right now*. A token with a mediocre score can top Radar because buy pressure just accelerated, a whale just bought off the curve, and holders just started growing — all at once. That convergence is the point: one signal type firing repeatedly scores the same as it firing once, but two or three distinct kinds of signal firing together get a real multiplier. Recency matters too — a signal from two minutes ago outweighs an identical one from two hours ago, and past a 30-minute window it stops counting at all.
 
 Risk is never hidden by momentum. Every Radar entry shows its risk level next to the score, plainly — Radar is a ranking system, not a buy signal.
