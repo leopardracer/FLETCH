@@ -84,7 +84,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 215 tests across 21 files |
+| `npm test` | The full suite — 218 tests across 22 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -95,6 +95,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 |---|---|---|
 | `signals/signalEngine.test.ts` | 16 | every signal type: buy/sell pressure, whale-move classification, risk-promoted signals, all trend signals (holder growth/decline, liquidity change, price movement, activity acceleration), `PHASE_CHANGE`, the phase-transition guard on liquidity signals, and that nothing fires without the data to back it |
 | `chain/hunt.test.ts` | 5 | `enrichOneLaunch`'s resilience — a failed per-launch enrichment (e.g. RPC rate-limit) returns a real launch with null dev-buy/exempt-wallet fields, never drops the launch, never fabricates a zero |
+| `chain/launch.test.ts` | 3 | `deriveGraduated` — a capped graduation-check scan that finds no event is genuinely unknown, not a confirmed `false`; finding an event is conclusive regardless of bounding |
 | `api/jsonSafe.test.ts` | 9 | `bigIntSafe` — the exact `whaleMoves` and `pingChain()` shapes that crashed `JSON.stringify` in live testing, proven fixed |
 | `radar/radarEngine.test.ts` | 13 | every Radar formula constant: per-severity magnitude, recency decay, the convergence multiplier, the 0–100 clamp, and that volume (the same signal repeating) never scores higher than the same signal firing once |
 | `signals/types.test.ts` | 4 | `pickTopSignal` — regression test for a real bug where the API surfaced the first-detected signal instead of the most severe one |
@@ -106,7 +107,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | `persistence/walletActivityStore.test.ts` | 6 | profile aggregation, token-breadth dedup, per-wallet isolation |
 | `wallets/walletScore.test.ts` | 5 | every metric is explicitly `NOT_YET_IMPLEMENTED` with a stated reason — never a computed number, even with a long recorded history |
 | `core/config.test.ts` | 12 | env parsing, including regression tests for a real boolean-coercion bug, the bounded safe defaults of every monitoring parameter, and the log-scan bounds |
-| `chain/holders.test.ts` | 12 | `fetchLogsInChunks` and `boundedScanStart` — the two pure pieces of the holder-scan rate-limit resilience, including a direct regression test for the real ~237,000-block failure |
+| `chain/logScan.test.ts` | 12 | `fetchLogsInChunks` and `boundedScanStart` — the two shared, pure pieces behind every bounded log scan in `chain/*.ts` (holder counts, launch lookup, graduation check, last-trade price, buy/sell counts, transfers), including a direct regression test for the real ~237,000-block failure |
 | `poller/poller.test.ts` | 1 | the `ENABLE_POLLER=false` off-switch actually schedules nothing |
 | `monitoring/monitoringStore.test.ts` | 13 | discovery dedup, priority-ordered scheduling, the consecutive-failure cutoff, that a failure never touches real metric data, and that a stored launch (including its bigint fields) round-trips exactly |
 
@@ -127,6 +128,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 - (Continuous Monitoring phase) The original poller re-derived launch-moment facts (curve address, dev-buy data) from raw chain logs on every single cycle, for every token, forever — a real, needless RPC cost once a durable queue made "check the same token repeatedly" the normal case instead of a coincidence. Fixed by caching those facts once at discovery (`monitored_tokens.launch_json`).
 - A single rate-limited launch-enrichment call during discovery rejected `scanRecentLaunches()`'s entire return value, losing every other real launch already found in that same scan — not hypothetical, reproduced against real Robinhood Chain mainnet. Fixed by isolating each launch's enrichment (`enrichOneLaunch`).
 - A holder-count Transfer log replay for an old token could span hundreds of thousands of blocks in a single `eth_getLogs` call — confirmed against real mainnet data (~237,000 blocks), rejected outright by the public RPC. Fixed with chunked, bounded scanning (`fetchLogsInChunks`, `boundedScanStart` — see [docs/DATA.md#holder-scan-bounds](./DATA.md#holder-scan-bounds)).
+- That same fix turned out to cover only 1 of 6 identical unbounded-scan call sites — `readLaunchRecord` (defaulting to a scan from block 0), `readCurveState`, `lastTradePrice`, and two more in `rpcProvider.ts` all had the same shape. Confirmed against a real paid-tier provider (QuickNode): every single monitoring check still failed after the first fix, because the other five sites were untouched. All six now share the same bounded/chunked primitives (`chain/logScan.ts`). Also caught in the same pass: a capped graduation check that finds nothing had been reporting `graduated: false` — a real fabrication risk, since the true event could be outside the checked window. Fixed to return `null` (unknown) instead — see `deriveGraduated` in `chain/launch.ts`.
 
 ## Coverage
 
@@ -136,7 +138,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-82.26% line coverage / 82.16% branch / 72.55% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+82.18% line coverage / 82.18% branch / 72.33% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|

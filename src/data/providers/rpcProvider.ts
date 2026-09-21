@@ -8,6 +8,7 @@ import { readLiquidity } from "../../chain/liquidity.js";
 import { erc20Abi } from "../../chain/token.js";
 import { curveAbi } from "../../chain/pons.js";
 import { config } from "../../core/config.js";
+import { fetchLogsInChunks, boundedScanStart } from "../../chain/logScan.js";
 import { ImmutableCache } from "../../core/cache.js";
 import { recordWalletActivity } from "../../persistence/walletActivityStore.js";
 import type { ChainDataProvider, Token, TokenMetrics, Transfer, Holder, WalletActivity } from "../types.js";
@@ -84,9 +85,20 @@ export class RpcChainDataProvider implements ChainDataProvider {
     if (launch.found) {
       const client = getClient();
       const latest = await client.getBlockNumber();
+      const { fromBlock } = boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks);
       const [buys, sells] = await Promise.all([
-        client.getLogs({ address: launch.curve, event: curveAbi[0], fromBlock: launch.launchBlock, toBlock: latest }),
-        client.getLogs({ address: launch.curve, event: curveAbi[1], fromBlock: launch.launchBlock, toBlock: latest }),
+        fetchLogsInChunks(
+          (r) => client.getLogs({ address: launch.curve, event: curveAbi[0], fromBlock: r.fromBlock, toBlock: r.toBlock }),
+          fromBlock,
+          latest,
+          config.logScanChunkBlocks
+        ),
+        fetchLogsInChunks(
+          (r) => client.getLogs({ address: launch.curve, event: curveAbi[1], fromBlock: r.fromBlock, toBlock: r.toBlock }),
+          fromBlock,
+          latest,
+          config.logScanChunkBlocks
+        ),
       ]);
       buyCountWindow = buys.length;
       sellCountWindow = sells.length;
@@ -122,9 +134,15 @@ export class RpcChainDataProvider implements ChainDataProvider {
     const info = await readTokenInfo(address);
     const launch = await readLaunchRecord(address);
     const latest = await client.getBlockNumber();
-    const fromBlock = launch.found ? launch.launchBlock : latest > config.signalWindowBlocks ? latest - config.signalWindowBlocks : 0n;
+    const trueFromBlock = launch.found ? launch.launchBlock : latest > config.signalWindowBlocks ? latest - config.signalWindowBlocks : 0n;
+    const { fromBlock } = boundedScanStart(trueFromBlock, latest, true, config.maxHolderScanBlocks);
 
-    const logs = await client.getLogs({ address, event: erc20Abi[0], fromBlock, toBlock: latest });
+    const logs = await fetchLogsInChunks(
+      (r) => client.getLogs({ address, event: erc20Abi[0], fromBlock: r.fromBlock, toBlock: r.toBlock }),
+      fromBlock,
+      latest,
+      config.logScanChunkBlocks
+    );
     return logs.map((log) => {
       const { from, to, value } = log.args as { from: `0x${string}`; to: `0x${string}`; value: bigint };
       return {

@@ -3,6 +3,8 @@ import { getClient } from "./client.js";
 import { getPairAssetUsdPrice } from "../core/price-feed.js";
 import { readLaunchRecord, readCurveState, type LaunchRecord } from "./launch.js";
 import { NATIVE_ETH, curveAbi } from "./pons.js";
+import { config } from "../core/config.js";
+import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
 
 export interface LiquidityInfo {
   hasPool: boolean;
@@ -12,7 +14,10 @@ export interface LiquidityInfo {
   priceInPair: number | null;
   liquidityPairAsset: number | null;
   liquidityUsd: number | null;
-  graduated?: boolean;
+  /** null = genuinely unknown (no launch record found, or the graduation
+   *  check itself was bounded and found nothing within its window — see
+   *  chain/launch.ts's CurveState). Never guessed either way. */
+  graduated?: boolean | null;
   usdUnavailableReason?: string;
 }
 
@@ -39,6 +44,7 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
       priceInPair: null,
       liquidityPairAsset: null,
       liquidityUsd: null,
+      graduated: null,
       usdUnavailableReason: launch.reason,
     };
   }
@@ -78,7 +84,7 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
     priceInPair,
     liquidityPairAsset,
     liquidityUsd,
-    graduated: false,
+    graduated: curve.graduated,
     usdUnavailableReason:
       liquidityPairAsset === null
         ? "pair asset is not native ETH — ERC-20 quote-asset balance reading isn't implemented yet"
@@ -92,9 +98,20 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
 async function lastTradePrice(launch: LaunchRecord): Promise<number | null> {
   const client = getClient();
   const latest = await client.getBlockNumber();
+  const { fromBlock } = boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks);
   const [buys, sells] = await Promise.all([
-    client.getLogs({ address: launch.curve, event: curveAbi[0], fromBlock: launch.launchBlock, toBlock: latest }),
-    client.getLogs({ address: launch.curve, event: curveAbi[1], fromBlock: launch.launchBlock, toBlock: latest }),
+    fetchLogsInChunks(
+      (r) => client.getLogs({ address: launch.curve, event: curveAbi[0], fromBlock: r.fromBlock, toBlock: r.toBlock }),
+      fromBlock,
+      latest,
+      config.logScanChunkBlocks
+    ),
+    fetchLogsInChunks(
+      (r) => client.getLogs({ address: launch.curve, event: curveAbi[1], fromBlock: r.fromBlock, toBlock: r.toBlock }),
+      fromBlock,
+      latest,
+      config.logScanChunkBlocks
+    ),
   ]);
   const all = [...buys, ...sells].sort((a, b) => Number(b.blockNumber! - a.blockNumber!));
   if (all.length === 0) return null;

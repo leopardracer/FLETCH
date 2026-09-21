@@ -2,6 +2,7 @@ import { formatUnits } from "viem";
 import { getClient } from "./client.js";
 import { config } from "../core/config.js";
 import { PONS_V2_FACTORY, factoryAbi, curveAbi, SOLD_ON_CURVE_SUPPLY } from "./pons.js";
+import { fetchLogsInChunks } from "./logScan.js";
 
 export interface DetectedLaunch {
   token: `0x${string}`;
@@ -132,12 +133,24 @@ export async function scanRecentLaunches(windowBlocks?: bigint): Promise<Detecte
   const window = windowBlocks ?? config.signalWindowBlocks;
   const fromBlock = latest > window ? latest - window : 0n;
 
-  const launchLogs = await client.getLogs({
-    address: PONS_V2_FACTORY,
-    event: factoryAbi[0], // TokenLaunched
+  // Chunked (see chain/logScan.ts) — not re-capped by MAX_HOLDER_SCAN_BLOCKS,
+  // since `window` here is already the deliberate, configurable bound
+  // (SIGNAL_WINDOW_BLOCKS). Confirmed against real Robinhood Chain mainnet:
+  // even a single wide eth_getLogs call within a normal window gets
+  // rejected outright by RPC providers with a tight per-call block-range
+  // cap (free tiers on major providers cap a single call at 5-10 blocks).
+  const launchLogs = await fetchLogsInChunks(
+    (range) =>
+      client.getLogs({
+        address: PONS_V2_FACTORY,
+        event: factoryAbi[0], // TokenLaunched
+        fromBlock: range.fromBlock,
+        toBlock: range.toBlock,
+      }),
     fromBlock,
-    toBlock: latest,
-  });
+    latest,
+    config.logScanChunkBlocks
+  );
 
   const deployerCounts = new Map<string, number>();
   for (const log of launchLogs) {

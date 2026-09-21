@@ -1,13 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchLogsInChunks, boundedScanStart } from "./holders.js";
+import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
 
 /**
- * The two pure pieces of chain/holders.ts's rate-limit resilience,
- * proven directly — readHolderStats itself needs a live RPC and isn't
- * unit-tested, consistent with the rest of chain/*.ts. Both were added
- * after real Robinhood Chain mainnet testing showed a single eth_getLogs
- * call spanning ~237,000 blocks getting rejected by the public RPC.
+ * The two pure, shared log-scanning helpers used by holders.ts and
+ * launch.ts, proven directly — the functions that actually call the RPC
+ * (readHolderStats, readLaunchRecord, readCurveState) need a live
+ * connection and aren't unit-tested, consistent with the rest of
+ * chain/*.ts. Both were added after real Robinhood Chain mainnet testing
+ * showed unbounded eth_getLogs ranges (one ~237,000 blocks, another
+ * defaulting to a full from-genesis scan) getting rejected outright by
+ * real RPC providers — including free tiers that cap a single call at
+ * just 5-10 blocks.
  */
 
 // ---------- fetchLogsInChunks ----------
@@ -85,7 +89,7 @@ test("a zero or negative chunk size is rejected outright, not silently treated a
 test("a span within the cap is left untouched — isLifetime passes through unchanged", () => {
   const result = boundedScanStart(1000n, 5000n, true, 20_000n);
   assert.equal(result.fromBlock, 1000n);
-  assert.equal(result.isLifetime, true);
+  assert.equal(result.isComplete, true);
 });
 
 test("REGRESSION: a span exceeding the cap (the real ~237,000 block case) is capped, and isLifetime becomes false — never silently claimed as a true lifetime count", () => {
@@ -93,18 +97,18 @@ test("REGRESSION: a span exceeding the cap (the real ~237,000 block case) is cap
   const trueLaunchBlock = latest - 236_905n;
   const result = boundedScanStart(trueLaunchBlock, latest, true, 20_000n);
   assert.equal(result.fromBlock, latest - 20_000n);
-  assert.equal(result.isLifetime, false);
+  assert.equal(result.isComplete, false);
 });
 
 test("a span exactly at the cap is not treated as exceeding it", () => {
   const result = boundedScanStart(0n, 20_000n, true, 20_000n);
   assert.equal(result.fromBlock, 0n);
-  assert.equal(result.isLifetime, true);
+  assert.equal(result.isComplete, true);
 });
 
 test("isLifetime was already false (no launch record found) — capping never flips it back to true", () => {
   const result = boundedScanStart(0n, 100_000n, false, 20_000n);
-  assert.equal(result.isLifetime, false);
+  assert.equal(result.isComplete, false);
 });
 
 test("the capped fromBlock never goes negative, even on an extreme cap relative to chain height", () => {
