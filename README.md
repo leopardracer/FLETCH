@@ -3,13 +3,13 @@
 </p>
 
 <p align="center">
-  <img alt="tests" src="https://img.shields.io/badge/tests-182%20passing-D9670C?style=flat-square&labelColor=14100C">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-79.8%25-D9670C?style=flat-square&labelColor=14100C">
-  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F2E9DD?style=flat-square&labelColor=14100C">
-  <img alt="chain" src="https://img.shields.io/badge/chain-4663-F2E9DD?style=flat-square&labelColor=14100C">
-  <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F2E9DD?style=flat-square&labelColor=14100C">
-  <img alt="fabricated data" src="https://img.shields.io/badge/fabricated%20data-0-D9670C?style=flat-square&labelColor=14100C">
-  <img alt="license" src="https://img.shields.io/badge/license-MIT-F2E9DD?style=flat-square&labelColor=14100C">
+  <img alt="tests" src="https://img.shields.io/badge/tests-201%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-80.98%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
+  <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
+  <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F5E8EC?style=flat-square&labelColor=15050A">
+  <img alt="fabricated data" src="https://img.shields.io/badge/fabricated%20data-0-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-F5E8EC?style=flat-square&labelColor=15050A">
 </p>
 
 <p align="center"><b>The meme moves first. FLETCH tells you why.</b></p>
@@ -182,7 +182,7 @@ Every `DEMO`-labeled block above is illustrative shape, not real output — this
 ## Tests
 
 <p align="center">
-  <img src="./assets/tests-terminal.png" alt="FLETCH test suite — 182 passing, 79.79% line coverage, clean build" width="100%">
+  <img src="./assets/tests-terminal.png" alt="FLETCH test suite — 201 passing, 80.98% line coverage, clean build" width="100%">
 </p>
 
 FLETCH's test suite covers the parts of the product where correctness actually matters: every FLETCH Score formula, every risk-finding threshold, every signal type the signal engine can emit, the persistence layer that backs all of it, and the API surface end-to-end over real HTTP. All of it runs deterministically — no live RPC calls, no real database file, no wall-clock timing — using Node's built-in test runner and `node:sqlite`'s in-memory mode, so a run is exact and reproducible every time.
@@ -192,8 +192,8 @@ npm test
 ```
 
 ```
-tests 182
-pass 182
+tests 201
+pass 201
 fail 0
 ```
 
@@ -202,14 +202,15 @@ npm run test:coverage
 ```
 
 ```
-all files   |  79.79 |    81.28 |   71.96 |
+all files   |  80.98 |    81.93 |   73.20 |
 ```
 
-79.79% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer — sits at 90–100%. The lower spots are `chain/*.ts` and `data/providers/rpcProvider.ts`, which genuinely need a live RPC connection to exercise meaningfully; per this project's own rule against fabricating chain data, those aren't mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+80.98% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer — sits at 90–100%. The lower spots are `chain/*.ts` and `data/providers/rpcProvider.ts`, which genuinely need a live RPC connection to exercise meaningfully; per this project's own rule against fabricating chain data, those aren't mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
-npm run test:integration   # the two test files that exercise multiple layers together —
-                            # chain metrics → risk → score → signals → persistence, and a
+npm run test:integration   # the five test files that exercise multiple layers together —
+                            # chain metrics → risk → score → signals → persistence, discovery
+                            # → monitoring queue → bounded checks, Radar ranking, and a
                             # real Express app over real HTTP
 npm run test:watch         # re-runs on every change to the compiled output
 ```

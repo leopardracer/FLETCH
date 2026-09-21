@@ -132,7 +132,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-79.79% line coverage / 81.28% branch / 71.96% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+80.98% line coverage / 81.93% branch / 73.20% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
