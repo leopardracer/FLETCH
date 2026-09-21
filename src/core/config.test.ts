@@ -34,6 +34,8 @@ const ENV_KEYS = [
   "SNAPSHOT_RETENTION_DAYS",
   "LOG_SCAN_CHUNK_BLOCKS",
   "MAX_HOLDER_SCAN_BLOCKS",
+  "RATE_LIMIT_WINDOW_MS",
+  "RATE_LIMIT_MAX",
 ];
 
 async function freshConfig(overrides: Record<string, string>) {
@@ -112,6 +114,15 @@ test("monitoring config has safe, bounded defaults — never zero/unbounded, whi
   assert.ok(c.maxConsecutiveFailures > 0);
   assert.ok(c.signalRetentionDays > 0);
   assert.ok(c.snapshotRetentionDays > 0);
+});
+
+test("rate limit config defaults to a bounded, local-dev-safe window and cap, and coerces from env strings", async () => {
+  const defaulted = await freshConfig({});
+  assert.ok(defaulted.rateLimitWindowMs > 0);
+  assert.ok(defaulted.rateLimitMax > 0 && defaulted.rateLimitMax < 10_000); // never accidentally unbounded
+  const overridden = await freshConfig({ RATE_LIMIT_WINDOW_MS: "1000", RATE_LIMIT_MAX: "5" });
+  assert.equal(overridden.rateLimitWindowMs, 1000);
+  assert.equal(overridden.rateLimitMax, 5);
 });
 
 test("monitoring config values coerce from env strings to real numbers", async () => {

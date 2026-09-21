@@ -97,6 +97,17 @@ export function getDb(): DatabaseSync {
   return _db;
 }
 
+/** Closes the real (file-backed) database cleanly on shutdown — see
+ *  index.ts's SIGTERM/SIGINT handler. A no-op if the db was never opened
+ *  (e.g. RPC_URL unset, so getDb() was never called) or already closed;
+ *  node:sqlite doesn't error on a redundant close, but this still guards
+ *  it so shutdown logic never has to know which case it's in. */
+export function closeDb(): void {
+  if (!_db) return;
+  _db.close();
+  _db = null;
+}
+
 /** Test-only: point at a fresh in-memory database instead of the configured file. */
 export function useInMemoryDbForTests(): DatabaseSync {
   _db = new DatabaseSync(":memory:");

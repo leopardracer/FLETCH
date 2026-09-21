@@ -19,11 +19,15 @@ let discoveryRunning = false;
  *
  * Both survive process restart because the queue itself is a SQLite table,
  * not in-memory state. Set ENABLE_POLLER=false to disable entirely.
+ *
+ * Returns a stop function that clears both intervals — see index.ts's
+ * SIGTERM/SIGINT handler. Calling it is optional: it exists for a clean
+ * shutdown, not for correctness while running.
  */
-export function startPoller(): void {
+export function startPoller(): () => void {
   if (!config.enablePoller) {
     console.log("Poller disabled (ENABLE_POLLER=false) — signals/snapshots only accumulate from page views.");
-    return;
+    return () => {};
   }
   console.log(
     `Monitoring enabled: discovery every ${config.discoveryIntervalMs / 1000}s, ` +
@@ -38,8 +42,13 @@ export function startPoller(): void {
 
   discoveryTick();
   monitoringTick();
-  setInterval(discoveryTick, config.discoveryIntervalMs);
-  setInterval(monitoringTick, config.pollIntervalMs);
+  const discoveryHandle = setInterval(discoveryTick, config.discoveryIntervalMs);
+  const monitoringHandle = setInterval(monitoringTick, config.pollIntervalMs);
+
+  return () => {
+    clearInterval(discoveryHandle);
+    clearInterval(monitoringHandle);
+  };
 }
 
 async function runDiscoveryTick(): Promise<void> {

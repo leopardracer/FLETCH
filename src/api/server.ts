@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../core/config.js";
@@ -58,10 +59,29 @@ function asyncRoute(
   };
 }
 
-export function createServer() {
+export function createServer(options?: { rateLimit?: { windowMs: number; limit: number } }) {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  // Bounds request volume per IP before it can turn into unbounded RPC
+  // load on /api/tokens and friends — see core/config.ts for the
+  // (generous, local-dev-safe) defaults. Static dashboard assets below
+  // are unaffected; this only wraps /api/*. Overridable per-instance (see
+  // `options`) purely so api/server.test.ts can exercise the actual 429
+  // path against a dedicated, short-lived server instead of the shared
+  // one every other test in that file also hits.
+  const rl = options?.rateLimit ?? { windowMs: config.rateLimitWindowMs, limit: config.rateLimitMax };
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: rl.windowMs,
+      limit: rl.limit,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: "Too many requests — slow down." },
+    })
+  );
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const webDir = path.resolve(__dirname, "../../web");

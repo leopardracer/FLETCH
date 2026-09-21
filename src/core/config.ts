@@ -47,6 +47,15 @@ const envSchema = z.object({
   // history) was rejected by the public RPC. These two bound that read.
   LOG_SCAN_CHUNK_BLOCKS: z.coerce.number().default(2_000), // max block range per single eth_getLogs call
   MAX_HOLDER_SCAN_BLOCKS: z.coerce.number().default(20_000), // how far back a holder scan will ever look, even for an old token
+
+  // --- API rate limiting (api/server.ts) ---
+  // Generous enough that normal local dashboard usage (or a script
+  // polling every few seconds) never hits it, but bounded so a single
+  // caller can't drive unlimited RPC load through /api/tokens (several
+  // chain reads per token) if this is ever reachable from outside
+  // localhost. Per IP, sliding window.
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  RATE_LIMIT_MAX: z.coerce.number().default(120),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -83,6 +92,8 @@ export const config = {
   snapshotRetentionDays: env.SNAPSHOT_RETENTION_DAYS,
   logScanChunkBlocks: BigInt(env.LOG_SCAN_CHUNK_BLOCKS),
   maxHolderScanBlocks: BigInt(env.MAX_HOLDER_SCAN_BLOCKS),
+  rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
+  rateLimitMax: env.RATE_LIMIT_MAX,
 
   /** True when Blockscout's accelerated holder/tx endpoints are usable —
    *  otherwise providers must fall back to raw RPC log replay. */

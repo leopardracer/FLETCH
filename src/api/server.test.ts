@@ -210,3 +210,47 @@ test("a well-formed address is accepted and reaches the real route logic (fails 
   const res = await fetch(`${baseUrl}/api/tokens/${TOKEN}/history`);
   assert.equal(res.status, 200);
 });
+
+test("the rate limiter returns 429 past its configured cap — on a dedicated server with a tiny limit, isolated from the shared one every other test in this file uses, so this doesn't trip 429s for them", async () => {
+  const limitedApp = createServer({ rateLimit: { windowMs: 60_000, limit: 3 } });
+  const limitedServer = limitedApp.listen(0);
+  await new Promise<void>((resolve) => limitedServer.once("listening", resolve));
+  const addr = limitedServer.address();
+  const limitedBaseUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
+
+  try {
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const res = await fetch(`${limitedBaseUrl}/api/health`);
+      statuses.push(res.status);
+    }
+    // First 3 (the configured limit) go through as normal 200s; the 4th
+    // and 5th are rejected before ever reaching the route handler.
+    assert.deepEqual(statuses, [200, 200, 200, 429, 429]);
+
+    const rejected = await fetch(`${limitedBaseUrl}/api/health`);
+    const body = await rejected.json();
+    assert.match(body.error, /Too many requests/);
+  } finally {
+    limitedServer.close();
+  }
+});
+
+test("a static/dashboard path is never rate-limited by the /api limiter, even past its cap", async () => {
+  const limitedApp = createServer({ rateLimit: { windowMs: 60_000, limit: 2 } });
+  const limitedServer = limitedApp.listen(0);
+  await new Promise<void>((resolve) => limitedServer.once("listening", resolve));
+  const addr = limitedServer.address();
+  const limitedBaseUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
+
+  try {
+    // Exhaust the tiny /api limit first.
+    for (let i = 0; i < 3; i++) await fetch(`${limitedBaseUrl}/api/health`);
+    // The static dashboard (served from web/, not under the /api limiter)
+    // must still respond normally — the rate limit is scoped to /api only.
+    const res = await fetch(`${limitedBaseUrl}/index.html`);
+    assert.notEqual(res.status, 429);
+  } finally {
+    limitedServer.close();
+  }
+});

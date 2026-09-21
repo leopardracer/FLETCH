@@ -55,6 +55,7 @@ See `.env.example` for the full, current list with inline explanations. The impo
 - `SNAPSHOT_MIN_INTERVAL_SECONDS` — minimum gap between two recorded snapshots for the same token.
 - `DISCOVERY_INTERVAL_MS` / `MAX_CONCURRENT_TOKENS` / `MAX_MONITORED_TOKENS` / `MAX_CONSECUTIVE_FAILURES` / `SIGNAL_RETENTION_DAYS` / `SNAPSHOT_RETENTION_DAYS` — continuous monitoring (see [docs/MONITORING.md](./MONITORING.md)). All have bounded, conservative defaults.
 - `LOG_SCAN_CHUNK_BLOCKS` / `MAX_HOLDER_SCAN_BLOCKS` — bound a holder-count log replay (chain/holders.ts) so it stays viable against a rate-limited RPC even for an old token — see [docs/DATA.md#holder-scan-bounds](./DATA.md#holder-scan-bounds).
+- `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` — per-IP request cap on `/api/*` (see api/server.ts). Defaults are generous enough for normal local/dashboard use; exists to bound RPC load if the API is ever reachable from outside localhost.
 
 ## Persistence
 
@@ -84,7 +85,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 218 tests across 22 files |
+| `npm test` | The full suite — 221 tests across 22 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -138,7 +139,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-82.18% line coverage / 82.18% branch / 72.33% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+83.56% line coverage / 83.53% branch / 70.91% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
