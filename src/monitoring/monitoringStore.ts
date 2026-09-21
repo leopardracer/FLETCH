@@ -80,6 +80,23 @@ export function upsertDiscovered(
  *  however overdue they are). Only ACTIVE tokens are ever returned —
  *  FAILED/PAUSED/COMPLETED tokens are never scheduled until something
  *  explicitly reactivates them. */
+/** Raw shape of a `monitored_tokens` row as `node:sqlite` returns it —
+ *  same reasoning as SnapshotRow/SignalRow in persistence/. */
+interface MonitoredTokenRow {
+  token: string;
+  first_detected_at: number;
+  last_checked_at: number | null;
+  last_success_at: number | null;
+  next_check_at: number;
+  status: MonitoringStatus;
+  phase: Phase | null;
+  failure_count: number;
+  last_error: string | null;
+  priority: MonitoringPriority;
+  updated_at: number;
+  launch_json: string | null;
+}
+
 export function getDueForCheck(now: number, limit: number): MonitoredToken[] {
   const db = getDb();
   const priorityRank = `CASE priority WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 ELSE 2 END`;
@@ -88,7 +105,7 @@ export function getDueForCheck(now: number, limit: number): MonitoredToken[] {
       `SELECT * FROM monitored_tokens WHERE status = 'ACTIVE' AND next_check_at <= ?
        ORDER BY ${priorityRank} ASC, next_check_at ASC LIMIT ?`
     )
-    .all(now, limit) as any[];
+    .all(now, limit) as unknown as MonitoredTokenRow[];
   return rows.map(rowToMonitoredToken);
 }
 
@@ -141,7 +158,7 @@ export function setPriority(token: `0x${string}`, priority: MonitoringPriority, 
 
 export function getMonitoredToken(token: `0x${string}`): MonitoredToken | null {
   const db = getDb();
-  const row = db.prepare(`SELECT * FROM monitored_tokens WHERE token = ?`).get(token.toLowerCase()) as any;
+  const row = db.prepare(`SELECT * FROM monitored_tokens WHERE token = ?`).get(token.toLowerCase()) as MonitoredTokenRow | undefined;
   return row ? rowToMonitoredToken(row) : null;
 }
 
@@ -188,7 +205,7 @@ export function getMonitoringHealth(now: number): MonitoringHealth {
   };
 }
 
-function rowToMonitoredToken(row: any): MonitoredToken {
+function rowToMonitoredToken(row: MonitoredTokenRow): MonitoredToken {
   return {
     token: row.token,
     firstDetectedAt: row.first_detected_at,

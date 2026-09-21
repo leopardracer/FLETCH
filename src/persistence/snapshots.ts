@@ -87,6 +87,29 @@ export function recordSnapshot(
 }
 
 /** Most recent snapshot strictly older than `olderThanSeconds` ago — the comparison point for trend signals. */
+/** Raw shape of a `token_snapshots` row as `node:sqlite` returns it —
+ *  snake_case columns, `graduated` as SQLite's 0/1/NULL rather than a real
+ *  boolean. Exists purely so rowToSnapshot (and its three call sites
+ *  below) can be typed instead of casting through `any`. */
+interface SnapshotRow {
+  taken_at: number;
+  price_in_pair: number | null;
+  liquidity_usd: number | null;
+  holder_count: number | null;
+  buy_count_window: number;
+  sell_count_window: number;
+  volume_pair_asset_window: number | null;
+  top_holder_concentration_pct: number | null;
+  fletch_score: number | null;
+  momentum_score: number | null;
+  liquidity_score: number | null;
+  holder_growth_score: number | null;
+  whale_activity_score: number | null;
+  safety_score: number | null;
+  risk_level: RiskLevel | null;
+  graduated: number | null;
+}
+
 export function getPreviousSnapshot(
   token: `0x${string}`,
   olderThanSeconds: number,
@@ -98,7 +121,7 @@ export function getPreviousSnapshot(
     .prepare(
       `SELECT * FROM token_snapshots WHERE token = ? AND taken_at <= ? ORDER BY taken_at DESC LIMIT 1`
     )
-    .get(token.toLowerCase(), cutoff) as any;
+    .get(token.toLowerCase(), cutoff) as SnapshotRow | undefined;
   if (!row) return null;
   return rowToSnapshot(row);
 }
@@ -108,7 +131,7 @@ export function getSnapshotHistory(token: `0x${string}`, limit = 50): TokenSnaps
   const db = getDb();
   const rows = db
     .prepare(`SELECT * FROM token_snapshots WHERE token = ? ORDER BY taken_at DESC LIMIT ?`)
-    .all(token.toLowerCase(), limit) as any[];
+    .all(token.toLowerCase(), limit) as unknown as SnapshotRow[];
   return rows.map(rowToSnapshot);
 }
 
@@ -119,7 +142,7 @@ export function getLatestSnapshot(token: `0x${string}`): TokenSnapshot | null {
   const db = getDb();
   const row = db
     .prepare(`SELECT * FROM token_snapshots WHERE token = ? ORDER BY taken_at DESC LIMIT 1`)
-    .get(token.toLowerCase()) as any;
+    .get(token.toLowerCase()) as SnapshotRow | undefined;
   return row ? rowToSnapshot(row) : null;
 }
 
@@ -140,7 +163,7 @@ export function countSnapshotsSince(sinceTimestamp: number): number {
   return row.n;
 }
 
-function rowToSnapshot(row: any): TokenSnapshot {
+function rowToSnapshot(row: SnapshotRow): TokenSnapshot {
   return {
     takenAt: row.taken_at,
     priceInPair: row.price_in_pair,

@@ -21,6 +21,21 @@
  * precision if that ever changes, and it matches the convention
  * GET /api/tokens already uses for launchBlock.
  */
+/**
+ * Extracts a display string from a caught value the same way every route
+ * handler in api/server.ts used to inline as `e?.message ?? "unknown
+ * error"` — duck-typed on a string `.message` property (so a real Error
+ * still works) rather than an `instanceof Error` check, which is what the
+ * original inline expression did via optional chaining. Centralized here,
+ * alongside bigIntSafe, as the other small pure helper the API's error
+ * responses depend on — see server.ts's asyncRoute.
+ */
+export function errorMessage(e: unknown): string {
+  return typeof e === "object" && e !== null && "message" in e && typeof (e as { message: unknown }).message === "string"
+    ? (e as { message: string }).message
+    : "unknown error";
+}
+
 export function bigIntSafe<T>(value: T): T {
   if (typeof value === "bigint") return value.toString() as unknown as T;
   if (Array.isArray(value)) return value.map((v) => bigIntSafe(v)) as unknown as T;

@@ -108,8 +108,12 @@ export async function runMonitoringCycle(
       const priority = computeNextPriority(item, now);
       recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority), priority);
       succeeded++;
-    } catch (e: any) {
-      recordCheckFailure(item.token as `0x${string}`, String(e?.message ?? e), now, now + config.pollIntervalMs / 1000, config.maxConsecutiveFailures);
+    } catch (e: unknown) {
+      const message =
+        typeof e === "object" && e !== null && "message" in e && typeof (e as { message: unknown }).message === "string"
+          ? (e as { message: string }).message
+          : String(e);
+      recordCheckFailure(item.token as `0x${string}`, message, now, now + config.pollIntervalMs / 1000, config.maxConsecutiveFailures);
       failed++;
     }
   });

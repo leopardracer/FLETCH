@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import type { Signal } from "../signals/types.js";
+import type { Signal, SignalType, SignalSeverity } from "../signals/types.js";
 
 export function recordSignal(token: `0x${string}`, signal: Signal): void {
   const db = getDb();
@@ -22,13 +22,28 @@ export interface StoredSignal extends Signal {
   token: string;
 }
 
+/** Raw shape of a `signals` row as `node:sqlite` returns it — same
+ *  reasoning as SnapshotRow in persistence/snapshots.ts. `type`/`severity`
+ *  reuse the real unions since recordSignal above only ever writes one of
+ *  those exact string values into the column. */
+interface SignalRow {
+  token: string;
+  type: SignalType;
+  severity: SignalSeverity;
+  confidence: number;
+  evidence: string;
+  explanation: string;
+  block_number: string | null;
+  taken_at: number;
+}
+
 /** Chain-wide recent signals for the live feed, most severe + most recent first. */
 export function getRecentSignals(limit = 50): StoredSignal[] {
   const db = getDb();
   const severityRank = `CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END`;
   const rows = db
     .prepare(`SELECT * FROM signals ORDER BY ${severityRank} ASC, taken_at DESC LIMIT ?`)
-    .all(limit) as any[];
+    .all(limit) as unknown as SignalRow[];
   return rows.map(rowToSignal);
 }
 
@@ -36,7 +51,7 @@ export function getSignalsForToken(token: `0x${string}`, limit = 50): StoredSign
   const db = getDb();
   const rows = db
     .prepare(`SELECT * FROM signals WHERE token = ? ORDER BY taken_at DESC LIMIT ?`)
-    .all(token.toLowerCase(), limit) as any[];
+    .all(token.toLowerCase(), limit) as unknown as SignalRow[];
   return rows.map(rowToSignal);
 }
 
@@ -48,7 +63,7 @@ export function getSignalsForTokenSince(token: `0x${string}`, sinceTimestamp: nu
   const db = getDb();
   const rows = db
     .prepare(`SELECT * FROM signals WHERE token = ? AND taken_at >= ? ORDER BY taken_at DESC`)
-    .all(token.toLowerCase(), sinceTimestamp) as any[];
+    .all(token.toLowerCase(), sinceTimestamp) as unknown as SignalRow[];
   return rows.map(rowToSignal);
 }
 
@@ -80,7 +95,7 @@ export function countSignalsSince(sinceTimestamp: number): number {
   return row.n;
 }
 
-function rowToSignal(row: any): StoredSignal {
+function rowToSignal(row: SignalRow): StoredSignal {
   return {
     token: row.token,
     type: row.type,
