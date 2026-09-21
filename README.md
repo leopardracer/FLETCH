@@ -54,7 +54,7 @@ Full breakdown, including why the data-provider boundary exists and what it unlo
 ## Watch it run
 
 <p align="center">
-  <img src="./assets/watch-it-run.png" alt="Real terminal output: FLETCH booting the API and responding to two real requests" width="100%">
+  <img src="./assets/watch-it-run.gif" alt="Real terminal output: FLETCH booting the API and responding to two real requests" width="100%">
 </p>
 
 Real terminal output — `npm run dev` booting the actual API, then two real requests against it: a health check, and a malformed address. No RPC connection is configured in this capture, and FLETCH says exactly that instead of pretending otherwise. That's the whole point of the project.
@@ -182,7 +182,7 @@ Every `DEMO`-labeled block above is illustrative shape, not real output — this
 ## Tests
 
 <p align="center">
-  <img src="./assets/tests-terminal.png" alt="FLETCH test suite — 201 passing, 80.98% line coverage, clean build" width="100%">
+  <img src="./assets/tests-terminal.gif" alt="FLETCH test suite — 201 passing, 80.98% line coverage, clean build" width="100%">
 </p>
 
 FLETCH's test suite covers the parts of the product where correctness actually matters: every FLETCH Score formula, every risk-finding threshold, every signal type the signal engine can emit, the persistence layer that backs all of it, and the API surface end-to-end over real HTTP. All of it runs deterministically — no live RPC calls, no real database file, no wall-clock timing — using Node's built-in test runner and `node:sqlite`'s in-memory mode, so a run is exact and reproducible every time.
