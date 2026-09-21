@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="tests" src="https://img.shields.io/badge/tests-221%20passing-D9316A?style=flat-square&labelColor=15050A">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-83.56%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
@@ -19,6 +20,19 @@
 Meme tokens on Robinhood Chain launch by the thousand, and most of what "moves" is noise. FLETCH is the intelligence layer that reads the chain directly — launches, trades, holders, liquidity, deployer behavior — and turns it into three plain-English answers: what's happening, why, and whether it's worth your attention. Every number is either a real chain read or explicitly marked `unavailable`. Nothing here is a fabricated demo dressed up as a live product.
 
 FLETCH is **not** a token screener, a trading bot, an AI chatbot, or a price predictor. There is no execution path in this repository.
+
+<details open>
+<summary><b>Contents</b></summary>
+
+**What & why** — [What is FLETCH?](#what-is-fletch) · [How it works](#how-it-works) · [Watch it run](#watch-it-run)
+
+**Product** — [Early Signals](#early-signals) · [Signal Engine](#signal-engine) · [Continuous Monitoring](#continuous-monitoring) · [Meme Radar](#meme-radar) · [FLETCH Score](#fletch-score) · [Why is it moving?](#why-is-it-moving) · [Risk Intelligence](#risk-intelligence) · [Smart Money](#smart-money)
+
+**Using it** — [Architecture](#architecture) · [Quick Start](#quick-start) · [Live Data](#live-data) · [Demo](#demo)
+
+**Contributing** — [Tests](#tests) · [Development](#development) · [Roadmap](#roadmap) · [Built on](#built-on) · [License](#license)
+
+</details>
 
 ## What is FLETCH?
 
@@ -59,7 +73,7 @@ Full breakdown, including why the data-provider boundary exists and what it unlo
 
 Real terminal output — `npm run dev` booting the actual API, then two real requests against it: a health check, and a malformed address. No RPC connection is configured in this capture, and FLETCH says exactly that instead of pretending otherwise. That's the whole point of the project.
 
-**FLETCH starts with the chain, not the chart.**
+> **FLETCH starts with the chain, not the chart.**
 
 Launches, trades, holders, liquidity, and whale activity are read directly off Robinhood Chain — not scraped, not estimated. Those reads feed a risk engine and a signal engine that run on every check, and both feed into the FLETCH Score. None of that is optional or mocked: turn off `RPC_URL` and the app tells you so, the way it just did above, instead of drawing a chart from nothing.
 
@@ -92,7 +106,7 @@ FLETCH doesn't wait for someone to open a token page. A durable, prioritized mon
 
 ## Meme Radar
 
-**THE CHAIN MOVES FIRST. FLETCH FINDS IT.**
+> **THE CHAIN MOVES FIRST. FLETCH FINDS IT.**
 
 The Tokens feed ranks by FLETCH Score. Radar ranks by something different: how much is changing *right now*. A token with a mediocre score can top Radar because buy pressure just accelerated, a whale just bought off the curve, and holders just started growing — all at once. That convergence is the point: one signal type firing repeatedly scores the same as it firing once, but two or three distinct kinds of signal firing together get a real multiplier. Recency matters too — a signal from two minutes ago outweighs an identical one from two hours ago, and past a 30-minute window it stops counting at all.
 
@@ -104,18 +118,18 @@ Ranking needs no live chain call: candidates and scores come straight from persi
 
 Six components, each either a real number or an explicit `null` with a reason. The overall score re-weights across only the components that are actually available for a given token — a token isn't punished for Smart Money and Social not existing yet.
 
-```
-DEMO — illustrative shape only, not a real token's output
+*DEMO — illustrative shape only, not a real token's output.*
 
-$ARROWCAT                                    FLETCH SCORE   91
+**`$ARROWCAT` — FLETCH SCORE `91`**
 
-  MOMENTUM       96      buy pressure + activity level, since launch
-  SMART MONEY    UNAVAILABLE   no cross-token wallet history store yet
-  HOLDERS        91      +42% since the last check (real, once history exists)
-  LIQUIDITY      82      curve balance, converted to USD
-  WHALE ACTIVITY 78      3 whale buys from the curve, no sells
-  SAFETY         71      inverse of the risk report
-```
+| Component | Score | Why |
+|---|---|---|
+| Momentum | 96 | buy pressure + activity level, since launch |
+| Smart Money | `UNAVAILABLE` | no cross-token wallet history store yet |
+| Holders | 91 | +42% since the last check (real, once history exists) |
+| Liquidity | 82 | curve balance, converted to USD |
+| Whale Activity | 78 | 3 whale buys from the curve, no sells |
+| Safety | 71 | inverse of the risk report |
 
 Exact formulas, weight re-normalization, and what "not yet a growth rate" means for Holder Growth: [docs/SCORING.md](./docs/SCORING.md).
 
@@ -227,7 +241,8 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 
 ## Roadmap
 
-Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-steps):
+<details>
+<summary>Priority order, 9 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
 1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
 2. Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot
@@ -238,6 +253,8 @@ Priority order, detailed in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#next-ste
 7. Batch the feed endpoint's per-launch RPC calls via multicall
 8. Automatic reactivation of a `FAILED` monitored token after a longer cool-off, instead of requiring a process restart
 9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice
+
+</details>
 
 ## Built on
 
