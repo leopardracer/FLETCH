@@ -28,20 +28,24 @@
     "test:watch": "tsc -p tsconfig.json && node --test --watch dist/**/*.test.js",
     "test:coverage": "tsc -p tsconfig.json && node --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.js\" dist/**/*.test.js",
     "test:integration": "tsc -p tsconfig.json && node --test dist/signals/signalService.test.js dist/radar/radarService.test.js dist/monitoring/monitoringService.test.js dist/monitoring/monitoringService.stress.test.js dist/api/server.test.js",
+    "lint": "eslint src",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {
-    "viem": "^2.21.0",
-    "zod": "^3.23.8",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "cors": "^2.8.5"
+    "viem": "^2.21.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "@types/node": "^22.5.0",
+    "@eslint/js": "^10.0.1",
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17"
+    "@types/node": "^22.5.0",
+    "eslint": "^10.11.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.70.1"
   },
   "engines": {
     "node": ">=22.6.0"

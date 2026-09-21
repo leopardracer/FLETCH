@@ -6,7 +6,8 @@ FLETCH's one hard rule: **never fabricate data.** Every number shown either come
 
 ```bash
 npm install
-npm test    # builds and runs the unit suite — must pass
+npm run lint   # warnings are fine, new errors aren't
+npm test       # builds and runs the unit suite — must pass
 ```
 
 ## Where things live

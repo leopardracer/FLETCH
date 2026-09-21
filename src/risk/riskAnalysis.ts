@@ -1,6 +1,5 @@
 import { devBuyPercentOfCurveSupply, type DetectedLaunch } from "../chain/hunt.js";
 import type { TokenMetrics } from "../data/types.js";
-import { PONS_PROTOCOL_ADDRESSES } from "../chain/pons.js";
 import type { TokenSnapshot } from "../persistence/snapshots.js";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -31,7 +30,6 @@ export interface RiskReport {
 }
 
 const LEVEL_WEIGHT: Record<RiskLevel, number> = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
-const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase()));
 
 /**
  * Every finding here comes from a real chain read (launch event data,
