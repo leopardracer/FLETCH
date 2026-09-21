@@ -19,11 +19,83 @@ export interface HolderStats {
 
 const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase()));
 
+export interface LogRange {
+  fromBlock: bigint;
+  toBlock: bigint;
+}
+
 /**
- * Holder stats for any token, computed via full Transfer log replay from
- * the launch block. This is a real, exact count — but it is O(transfers)
- * in RPC log volume per token, which is fine for one token on demand and
- * does not scale to "compute holder counts for every live token
+ * Splits [fromBlock, toBlock] into chunks of at most `chunkSize` blocks
+ * and fetches each sequentially, concatenating the results. Sequential,
+ * not parallel — deliberately doesn't add more concurrent load on an
+ * already rate-limited RPC (same principle as chain/hunt.ts's per-launch
+ * enrichment). Throws on the first chunk that fails, rather than
+ * returning whatever succeeded: a holder count computed from partial
+ * Transfer history would be genuinely *wrong*, not just less precise —
+ * unlike a missing dev-buy check, there's no honest "null" version of a
+ * holder count derived from an incomplete log set, so this never
+ * silently returns one.
+ *
+ * `getLogs` is injected purely for testability — no live RPC needed to
+ * verify the chunking math or the fail-fast behavior. readHolderStats
+ * (below) passes the real client call.
+ */
+export async function fetchLogsInChunks<T>(
+  getLogs: (range: LogRange) => Promise<T[]>,
+  fromBlock: bigint,
+  toBlock: bigint,
+  chunkSize: bigint
+): Promise<T[]> {
+  if (chunkSize <= 0n) throw new Error("chunkSize must be a positive number of blocks");
+  if (fromBlock > toBlock) return [];
+
+  const results: T[] = [];
+  let start = fromBlock;
+  while (start <= toBlock) {
+    const end = start + chunkSize - 1n > toBlock ? toBlock : start + chunkSize - 1n;
+    const chunkLogs = await getLogs({ fromBlock: start, toBlock: end });
+    results.push(...chunkLogs);
+    start = end + 1n;
+  }
+  return results;
+}
+
+/**
+ * Caps how far back a holder scan will ever look, even for an old token
+ * whose real launch block is much further back. Confirmed against real
+ * Robinhood Chain mainnet: a single eth_getLogs call spanning ~237,000
+ * blocks (an old token's full history) was rejected by the public RPC —
+ * and chunking that same range would mean well over a hundred sequential
+ * requests for one token, which trades one rejected call for a very
+ * plausible rate-limit trip instead. Capping the *lookback* bounds the
+ * number of chunks directly, regardless of how old the token is.
+ *
+ * Returns the (possibly capped) fromBlock and whether the result is
+ * still a true lifetime count — false the moment the cap actually binds,
+ * so callers never call a capped, partial-history count "lifetime."
+ */
+export function boundedScanStart(
+  trueFromBlock: bigint,
+  latestBlock: bigint,
+  isLifetimeCandidate: boolean,
+  maxScanBlocks: bigint
+): { fromBlock: bigint; isLifetime: boolean } {
+  const span = latestBlock - trueFromBlock;
+  if (span <= maxScanBlocks) return { fromBlock: trueFromBlock, isLifetime: isLifetimeCandidate };
+  const cappedFromBlock = latestBlock - maxScanBlocks;
+  return { fromBlock: cappedFromBlock < 0n ? 0n : cappedFromBlock, isLifetime: false };
+}
+
+/**
+ * Holder stats for any token, computed via Transfer log replay from the
+ * launch block — chunked (LOG_SCAN_CHUNK_BLOCKS per request) and bounded
+ * (MAX_HOLDER_SCAN_BLOCKS lookback) so this stays viable against a real,
+ * rate-limited RPC even for an old token — see fetchLogsInChunks and
+ * boundedScanStart above. This is a real, exact count when isLifetime is
+ * true; past the lookback cap, it's an honest bounded-window count
+ * instead, never silently presented as lifetime. Still O(transfers) in
+ * total RPC log volume per token, which is fine for one token on demand
+ * and does not scale to "compute holder counts for every live token
  * continuously." See data/providers/blockscoutProvider.ts for the
  * scalable path.
  */
@@ -37,19 +109,25 @@ export async function readHolderStats(
   const latest = await client.getBlockNumber();
 
   const launch = await readLaunchRecord(tokenAddress);
-  const isLifetime = launch.found;
-  const fromBlock = launch.found
+  const trueFromBlock = launch.found
     ? launch.launchBlock
     : latest > config.signalWindowBlocks
     ? latest - config.signalWindowBlocks
     : 0n;
+  const { fromBlock, isLifetime } = boundedScanStart(trueFromBlock, latest, launch.found, config.maxHolderScanBlocks);
 
-  const logs = await client.getLogs({
-    address: tokenAddress,
-    event: erc20Abi[0], // Transfer
+  const logs = await fetchLogsInChunks(
+    (range) =>
+      client.getLogs({
+        address: tokenAddress,
+        event: erc20Abi[0], // Transfer
+        fromBlock: range.fromBlock,
+        toBlock: range.toBlock,
+      }),
     fromBlock,
-    toBlock: latest,
-  });
+    latest,
+    config.logScanChunkBlocks
+  );
 
   const balance = new Map<string, bigint>();
   const netChange = new Map<string, bigint>();

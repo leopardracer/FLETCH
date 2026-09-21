@@ -54,6 +54,7 @@ See `.env.example` for the full, current list with inline explanations. The impo
 - `ENABLE_POLLER` / `POLL_INTERVAL_MS` / `POLL_TOKEN_LIMIT` — the background snapshot poller (see [Persistence](#persistence)). Only starts if `RPC_URL` is set.
 - `SNAPSHOT_MIN_INTERVAL_SECONDS` — minimum gap between two recorded snapshots for the same token.
 - `DISCOVERY_INTERVAL_MS` / `MAX_CONCURRENT_TOKENS` / `MAX_MONITORED_TOKENS` / `MAX_CONSECUTIVE_FAILURES` / `SIGNAL_RETENTION_DAYS` / `SNAPSHOT_RETENTION_DAYS` — continuous monitoring (see [docs/MONITORING.md](./MONITORING.md)). All have bounded, conservative defaults.
+- `LOG_SCAN_CHUNK_BLOCKS` / `MAX_HOLDER_SCAN_BLOCKS` — bound a holder-count log replay (chain/holders.ts) so it stays viable against a rate-limited RPC even for an old token — see [docs/DATA.md#holder-scan-bounds](./DATA.md#holder-scan-bounds).
 
 ## Persistence
 
@@ -83,7 +84,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 201 tests across 20 files |
+| `npm test` | The full suite — 215 tests across 21 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -104,7 +105,8 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | `persistence/signalsStore.test.ts` | 14 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries, distinct-token discovery for Meme Radar, retention pruning, and recent-activity counts |
 | `persistence/walletActivityStore.test.ts` | 6 | profile aggregation, token-breadth dedup, per-wallet isolation |
 | `wallets/walletScore.test.ts` | 5 | every metric is explicitly `NOT_YET_IMPLEMENTED` with a stated reason — never a computed number, even with a long recorded history |
-| `core/config.test.ts` | 10 | env parsing, including regression tests for a real boolean-coercion bug and the bounded, safe defaults of every new monitoring parameter |
+| `core/config.test.ts` | 12 | env parsing, including regression tests for a real boolean-coercion bug, the bounded safe defaults of every monitoring parameter, and the log-scan bounds |
+| `chain/holders.test.ts` | 12 | `fetchLogsInChunks` and `boundedScanStart` — the two pure pieces of the holder-scan rate-limit resilience, including a direct regression test for the real ~237,000-block failure |
 | `poller/poller.test.ts` | 1 | the `ENABLE_POLLER=false` off-switch actually schedules nothing |
 | `monitoring/monitoringStore.test.ts` | 13 | discovery dedup, priority-ordered scheduling, the consecutive-failure cutoff, that a failure never touches real metric data, and that a stored launch (including its bigint fields) round-trips exactly |
 
@@ -123,6 +125,8 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 - Signal history wasn't deduplicated. Snapshots were correctly rate-limited, but every detected signal was still persisted on every call regardless — three rapid page views wrote three identical `BUY_PRESSURE` rows. Fixed by only persisting signals alongside a genuinely new snapshot.
 - The `topSignal` field on `GET /api/tokens` rows was `signals[0]` — the first signal detected in the engine's fixed code order, not the most severe one. Fixed with a dedicated, tested `pickTopSignal()` helper.
 - (Continuous Monitoring phase) The original poller re-derived launch-moment facts (curve address, dev-buy data) from raw chain logs on every single cycle, for every token, forever — a real, needless RPC cost once a durable queue made "check the same token repeatedly" the normal case instead of a coincidence. Fixed by caching those facts once at discovery (`monitored_tokens.launch_json`).
+- A single rate-limited launch-enrichment call during discovery rejected `scanRecentLaunches()`'s entire return value, losing every other real launch already found in that same scan — not hypothetical, reproduced against real Robinhood Chain mainnet. Fixed by isolating each launch's enrichment (`enrichOneLaunch`).
+- A holder-count Transfer log replay for an old token could span hundreds of thousands of blocks in a single `eth_getLogs` call — confirmed against real mainnet data (~237,000 blocks), rejected outright by the public RPC. Fixed with chunked, bounded scanning (`fetchLogsInChunks`, `boundedScanStart` — see [docs/DATA.md#holder-scan-bounds](./DATA.md#holder-scan-bounds)).
 
 ## Coverage
 
@@ -132,13 +136,13 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-80.98% line coverage / 81.93% branch / 73.20% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+82.26% line coverage / 82.16% branch / 72.55% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
 | `signals/`, `scoring/`, `risk/`, `ai/`, `persistence/`, `monitoring/`, `wallets/walletScore.ts` | 90–100% | pure logic or fully mockable via in-memory SQLite and dependency-injected fakes — no excuse not to cover it |
 | `api/server.ts` | ~70% | the success paths that need a live RPC connection are the uncovered lines; every error path is covered |
-| `chain/*.ts`, `data/providers/rpcProvider.ts` | mostly low | these call `viem` against a real RPC endpoint — meaningfully testing them needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. Not covered by unit tests; exercised manually against a real `RPC_URL` instead |
+| `chain/*.ts`, `data/providers/rpcProvider.ts` | mostly low | these call `viem` against a real RPC endpoint — meaningfully testing the calls themselves needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. The pieces that don't touch the network directly (`hunt.ts`'s `enrichOneLaunch` resilience, `holders.ts`'s chunking/bounding) are extracted and unit-tested; the RPC calls themselves are exercised manually against a real `RPC_URL` instead |
 | `poller/poller.ts` | ~50% | only the off-switch is unit-tested; its actual work is `monitoringService.ts`'s cycles, which are fully covered separately |
 | `social.ts`, `wallets/smartMoney.ts` | low % but tiny | these are one-function honest-unavailable stubs — low coverage on a five-line file isn't a meaningful signal |
 

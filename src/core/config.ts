@@ -38,6 +38,15 @@ const envSchema = z.object({
   MAX_CONSECUTIVE_FAILURES: z.coerce.number().default(5), // a token failing this many checks in a row is marked FAILED and stops being scheduled, so one permanently-broken address can't retry forever
   SIGNAL_RETENTION_DAYS: z.coerce.number().default(30),
   SNAPSHOT_RETENTION_DAYS: z.coerce.number().default(30),
+
+  // --- Log-scan bounds (chain/holders.ts) ---
+  // A holder count is computed by replaying every Transfer log for a
+  // token from its launch block — real, exact, but O(transfers) in RPC
+  // log volume. Confirmed against live Robinhood Chain mainnet: a single
+  // eth_getLogs call spanning ~237,000 blocks (an older token's full
+  // history) was rejected by the public RPC. These two bound that read.
+  LOG_SCAN_CHUNK_BLOCKS: z.coerce.number().default(2_000), // max block range per single eth_getLogs call
+  MAX_HOLDER_SCAN_BLOCKS: z.coerce.number().default(20_000), // how far back a holder scan will ever look, even for an old token
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -72,6 +81,8 @@ export const config = {
   maxConsecutiveFailures: env.MAX_CONSECUTIVE_FAILURES,
   signalRetentionDays: env.SIGNAL_RETENTION_DAYS,
   snapshotRetentionDays: env.SNAPSHOT_RETENTION_DAYS,
+  logScanChunkBlocks: BigInt(env.LOG_SCAN_CHUNK_BLOCKS),
+  maxHolderScanBlocks: BigInt(env.MAX_HOLDER_SCAN_BLOCKS),
 
   /** True when Blockscout's accelerated holder/tx endpoints are usable —
    *  otherwise providers must fall back to raw RPC log replay. */

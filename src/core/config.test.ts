@@ -32,6 +32,8 @@ const ENV_KEYS = [
   "MAX_CONSECUTIVE_FAILURES",
   "SIGNAL_RETENTION_DAYS",
   "SNAPSHOT_RETENTION_DAYS",
+  "LOG_SCAN_CHUNK_BLOCKS",
+  "MAX_HOLDER_SCAN_BLOCKS",
 ];
 
 async function freshConfig(overrides: Record<string, string>) {
@@ -117,4 +119,17 @@ test("monitoring config values coerce from env strings to real numbers", async (
   assert.equal(c.maxConcurrentTokens, 3);
   assert.equal(c.maxMonitoredTokens, 50);
   assert.equal(c.signalRetentionDays, 7);
+});
+
+test("log-scan bounds have safe, non-zero defaults — never unbounded, which could re-trigger the exact wide-range RPC rejection this was built to fix", async () => {
+  const c = await freshConfig({});
+  assert.ok(c.logScanChunkBlocks > 0n);
+  assert.ok(c.maxHolderScanBlocks > 0n);
+  assert.ok(c.maxHolderScanBlocks >= c.logScanChunkBlocks, "the cap should allow at least one full chunk");
+});
+
+test("log-scan bounds coerce from env strings to real bigints", async () => {
+  const c = await freshConfig({ LOG_SCAN_CHUNK_BLOCKS: "500", MAX_HOLDER_SCAN_BLOCKS: "5000" });
+  assert.equal(c.logScanChunkBlocks, 500n);
+  assert.equal(c.maxHolderScanBlocks, 5000n);
 });

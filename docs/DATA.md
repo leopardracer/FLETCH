@@ -41,6 +41,18 @@ No reliable social-mentions/sentiment API specific to Robinhood Chain tokens was
 
 **Resolved in Phase 2.** With persistence in place, Holder Growth is a real percentage once a previous snapshot exists — see [SCORING.md](./SCORING.md). It still falls back to an absolute-count proxy for a token's first-ever read (no prior snapshot to compare against), labeled honestly rather than presented as a rate.
 
+### Holder count for an old token
+
+<a id="holder-scan-bounds"></a>
+
+**Confirmed against real Robinhood Chain mainnet, not theoretical.** A holder count comes from replaying every `Transfer` log from a token's launch block (`chain/holders.ts`) — for a token launched a while ago, that single range can span hundreds of thousands of blocks. A live test hit exactly this: a ~237,000-block `eth_getLogs` call was rejected outright by the public RPC.
+
+Two bounds, both real and both configurable (`.env.example`):
+- **`LOG_SCAN_CHUNK_BLOCKS`** (default 2,000) — the log replay is split into sequential chunks of at most this many blocks each, never one call spanning the full range.
+- **`MAX_HOLDER_SCAN_BLOCKS`** (default 20,000) — how far back a scan will ever look, even for an old token. This isn't just about avoiding one giant request — chunking alone would turn an old token's full history into potentially *hundreds* of sequential requests, trading one rejected call for a near-certain rate-limit trip. Capping the lookback bounds the number of chunks directly.
+
+Past the cap, `holderCountIsLifetime` is `false` — the count is an honest, bounded recent-window figure, never silently presented as a true lifetime count it isn't. If any individual chunk's request fails (rate limit, RPC blip), the whole read fails rather than returning a holder count computed from incomplete data — a partial count would be genuinely *wrong*, not just less precise, so there's no honest partial-success path here the way there is for launch enrichment (see [RISK.md](./RISK.md)).
+
 ## Provider landscape, if you're deciding what to add next
 
 | Provider | Gives you | Cost |
