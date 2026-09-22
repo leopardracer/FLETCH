@@ -41,5 +41,13 @@ export function buildWalletFacts(w: WalletIntelligence): string[] {
   line("Unrealized PnL", m.unrealizedPnl, (v) => `${v >= 0 ? "+" : ""}${fmt(v)} ETH`);
   line("Win rate", m.winRate, (v) => `${fmt(v, 1)}% (${m.winRate.reason ?? ""})`);
   line("Entry timing", m.earlyEntryTiming, (v) => `median ${fmt(v, 1)} blocks after each token's launch`);
+  line("Average holding period", m.averageHoldingPeriod, (v) => `${fmt(v, 1)} blocks from first buy to full exit, across closed positions`);
+  if (w.linkedWallets.length > 0) {
+    const top = w.linkedWallets[0];
+    facts.push(
+      `Coordinated-entry pattern: ${w.linkedWallets.length} other wallet(s) made their first buy within 2 blocks of this wallet on at least 2 of the same tokens ` +
+        `(closest: ${shortAddress(top.wallet)}, ${top.sharedTokens} shared token(s)). This is a timing pattern, not proof of common ownership.`
+    );
+  }
   return facts;
 }

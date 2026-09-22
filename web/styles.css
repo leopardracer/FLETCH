@@ -655,6 +655,8 @@ button#chat-send:disabled {
 .ai-facts summary { cursor: pointer; color: var(--ink-faint); }
 .ai-facts summary:hover { color: var(--ink-dim); }
 .ai-facts ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.55; }
+.lifecycle-row { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; }
+.lifecycle-item { display: inline-flex; align-items: center; gap: 6px; }
 .pos { color: var(--green); font-weight: 600; }
 .neg { color: var(--red); font-weight: 600; }
 

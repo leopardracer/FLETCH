@@ -1,6 +1,7 @@
 import { getWalletProfile, type WalletProfile } from "../persistence/walletActivityStore.js";
 import { getTradesForWallet, getContiguousCoverageFromLaunch, getTradeCoverage } from "../persistence/walletTradesStore.js";
 import { getLatestSnapshot } from "../persistence/snapshots.js";
+import { getLinkedWallets, DEFAULT_MAX_BLOCK_GAP, DEFAULT_MIN_SHARED_TOKENS, type LinkedWallet } from "./clusters.js";
 import { computePositions, summarizePositions, unrealizedPnlFor, median, type Position } from "./positions.js";
 
 /** A curve price older than this isn't used to value an open position. */
@@ -28,6 +29,12 @@ export interface WalletIntelligence {
    */
   positions: Position[];
   /**
+   * Wallets whose first buys repeatedly landed within a couple of blocks of
+   * this wallet's, across several tokens — a coordinated-entry pattern
+   * (see wallets/clusters.ts). A behavioral pattern, not proof of common ownership.
+   */
+  linkedWallets: LinkedWallet[];
+  /**
    * Still deliberately NOT a 0-100 "wallet score". Realized PnL and win
    * rate are now real numbers when FLETCH has the trades to back them;
    * everything that still needs data it doesn't have stays
@@ -39,7 +46,6 @@ export interface WalletIntelligence {
   >;
 }
 
-const NOT_IMPLEMENTED = (reason: string): WalletMetric => ({ availability: "NOT_YET_IMPLEMENTED", reason });
 const UNAVAILABLE = (reason: string): WalletMetric => ({ availability: "UNAVAILABLE", reason });
 
 export function getWalletIntelligence(wallet: `0x${string}`, now: number = Math.floor(Date.now() / 1000)): WalletIntelligence {
@@ -108,16 +114,29 @@ export function getWalletIntelligence(wallet: `0x${string}`, now: number = Math.
           reason: `median across ${entries.length} token(s); lower = earlier. In blocks, not seconds — per-trade timestamps aren't recorded`,
         };
 
+  // Average holding period — first buy to full exit, CLOSED positions only.
+  const holds = positions.map((p) => p.holdingBlocks).filter((v): v is number => v !== null);
+  const averageHoldingPeriod: WalletMetric =
+    holds.length === 0
+      ? UNAVAILABLE("no fully closed position with a known cost basis yet")
+      : {
+          availability: "REAL",
+          value: holds.reduce((a, b) => a + b, 0) / holds.length,
+          unit: "blocks held (mean)",
+          reason: `mean across ${holds.length} fully closed position(s), first buy to full exit. In blocks, not seconds — per-trade timestamps aren't recorded`,
+        };
+
   return {
     wallet: wallet.toLowerCase(),
     profile,
     positions,
+    linkedWallets: getLinkedWallets(wallet, DEFAULT_MAX_BLOCK_GAP, DEFAULT_MIN_SHARED_TOKENS),
     metrics: {
       winRate,
       realizedPnl,
       earlyEntryTiming,
       unrealizedPnl,
-      averageHoldingPeriod: NOT_IMPLEMENTED("needs real timestamps for each entry/exit block — only block numbers are recorded per trade today"),
+      averageHoldingPeriod,
       accumulationBehavior: profile ? { availability: "REAL" } : UNAVAILABLE("no recorded activity for this wallet yet"),
     },
   };

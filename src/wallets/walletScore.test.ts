@@ -17,15 +17,43 @@ beforeEach(() => {
   useInMemoryDbForTests();
 });
 
-const STILL_NOT_IMPLEMENTED = ["averageHoldingPeriod"] as const;
-
-test("metrics that still lack real data stay NOT_YET_IMPLEMENTED with a stated reason — never a computed number", () => {
+test("with no data, every metric is UNAVAILABLE with a stated reason — never a computed number, never NOT_YET_IMPLEMENTED any more", () => {
   const intel = getWalletIntelligence(WALLET);
-  for (const key of STILL_NOT_IMPLEMENTED) {
-    assert.equal(intel.metrics[key].availability, "NOT_YET_IMPLEMENTED");
-    assert.equal(intel.metrics[key].value, undefined);
-    assert.ok(intel.metrics[key].reason && intel.metrics[key].reason!.length > 0, `${key} must state why it isn't implemented`);
+  for (const [key, m] of Object.entries(intel.metrics)) {
+    assert.equal(m.availability, "UNAVAILABLE", key);
+    assert.equal(m.value, undefined, key);
+    assert.ok(m.reason && m.reason.length > 0, `${key} must state why it's unavailable`);
   }
+  assert.deepEqual(intel.linkedWallets, []);
+});
+
+test("average holding period is the mean first-buy-to-exit span of CLOSED positions, in blocks", () => {
+  recordCurveScan(TOKEN, 100, 100, 300, [
+    { wallet: WALLET, txHash: "0x01", logIndex: 0, blockNumber: 110, side: "buy", tokenAmount: 1000, quoteAmount: 1 },
+    { wallet: WALLET, txHash: "0x02", logIndex: 0, blockNumber: 150, side: "sell", tokenAmount: 1000, quoteAmount: 2 },
+  ]);
+  recordCurveScan(TOKEN_B, 100, 100, 300, [
+    { wallet: WALLET, txHash: "0x03", logIndex: 0, blockNumber: 110, side: "buy", tokenAmount: 1000, quoteAmount: 1 },
+    { wallet: WALLET, txHash: "0x04", logIndex: 0, blockNumber: 190, side: "sell", tokenAmount: 1000, quoteAmount: 2 },
+  ]);
+  const m = getWalletIntelligence(WALLET, NOW).metrics.averageHoldingPeriod;
+  assert.equal(m.availability, "REAL");
+  assert.equal(m.value, 60);
+  assert.match(m.unit!, /blocks/);
+});
+
+test("linked wallets show up on the wallet report", () => {
+  const OTHER = "0xdddddddddddddddddddddddddddddddddddddddd" as const;
+  for (const [t, b] of [[TOKEN, 110], [TOKEN_B, 210]] as const) {
+    recordCurveScan(t, 100, 100, 300, [
+      { wallet: WALLET, txHash: `0x${t.slice(-2)}1`, logIndex: 0, blockNumber: b, side: "buy", tokenAmount: 10, quoteAmount: 1 },
+      { wallet: OTHER, txHash: `0x${t.slice(-2)}2`, logIndex: 0, blockNumber: b + 1, side: "buy", tokenAmount: 10, quoteAmount: 1 },
+    ]);
+  }
+  const intel = getWalletIntelligence(WALLET, NOW);
+  assert.equal(intel.linkedWallets.length, 1);
+  assert.equal(intel.linkedWallets[0].wallet, OTHER);
+  assert.equal(intel.linkedWallets[0].sharedTokens, 2);
 });
 
 test("with no recorded trades, realized PnL and win rate are UNAVAILABLE with a reason, not 0", () => {

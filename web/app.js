@@ -229,6 +229,13 @@ async function renderRadar() {
   }
 }
 
+/** Lifecycle stage chip — DETECTED / STRENGTHENING / STEADY / FADING / RESOLVED (signals/lifecycle.ts). */
+function lifecycleChip(l) {
+  if (!l) return "";
+  const cls = l.stage === "STRENGTHENING" ? "HIGH" : l.stage === "DETECTED" ? "MEDIUM" : l.stage === "STEADY" ? "LOW" : "na";
+  return `<span class="chip ${cls}" title="${l.recentCount} in the last window vs ${l.previousCount} in the one before">${l.stage}</span>`;
+}
+
 function radarCard(e, rank) {
   const metricBits = [];
   if (e.metrics.liquidityUsd !== null) metricBits.push(`$${e.metrics.liquidityUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })} liquidity`);
@@ -245,7 +252,7 @@ function radarCard(e, rank) {
         </div>
 
         <div class="radar-row">
-          <span class="radar-risk-label">RISK</span>${severityChip(e.riskLevel)}
+          <span class="radar-risk-label">RISK</span>${severityChip(e.riskLevel)} ${lifecycleChip(e.topSignalLifecycle)}
           <span class="radar-fletch-label">FLETCH SCORE</span><span class="radar-fletch-num">${e.fletchScore !== null ? e.fletchScore : "—"}</span>
         </div>
 
@@ -604,7 +611,7 @@ async function renderToken(address) {
       getJSON(`/api/tokens/${address}`),
       getJSON(`/api/tokens/${address}/wallets`).catch(() => ({ wallets: [] })),
       getJSON(`/api/tokens/${address}/history`).catch(() => ({ snapshots: [] })),
-      getJSON(`/api/tokens/${address}/signals`).catch(() => ({ signals: [] })),
+      getJSON(`/api/tokens/${address}/signals`).catch(() => ({ signals: [], lifecycle: [] })),
     ]);
     const m = d.metrics;
     const s = d.fletchScore;
@@ -679,6 +686,12 @@ async function renderToken(address) {
 
       <div class="panel-block">
         <h2>Signal timeline</h2>
+        ${(signalsRes.lifecycle || []).length
+          ? `<div class="lifecycle-row">${signalsRes.lifecycle
+              .filter((l) => l.stage !== "RESOLVED")
+              .map((l) => `<span class="lifecycle-item"><span class="signal-type-label">${esc(l.type)}</span>${lifecycleChip(l)}</span>`)
+              .join("")}</div>`
+          : ""}
         ${
           signals.length
             ? `<div>${signals
@@ -1008,6 +1021,26 @@ async function renderWalletDetail(address) {
                   .join("")}</tbody>
               </table>`
             : stateBlock("pending", "NO POSITIONS YET", "No curve trades recorded for this wallet inside a token's gap-free history from launch.")
+        }
+      </div>
+      <div class="panel-block">
+        <h2>Linked wallets</h2>
+        <p style="color:var(--ink-faint);font-size:12.5px;margin-top:0">Wallets whose first buy landed within 2 blocks of this wallet's on at least 2 of the same tokens. A coordinated-entry timing pattern — not proof of common ownership.</p>
+        ${
+          (w.linkedWallets || []).length
+            ? `<table class="feed">
+                <thead><tr><th>Wallet</th><th>Shared tokens</th><th>Max gap</th></tr></thead>
+                <tbody>${w.linkedWallets
+                  .map(
+                    (l) => `<tr onclick="location.hash='#/wallet/${esc(l.wallet)}'">
+                      <td class="addr">${fmtAddr(l.wallet)}</td>
+                      <td>${l.sharedTokens}</td>
+                      <td>${l.maxBlockGap} block${l.maxBlockGap === 1 ? "" : "s"}</td>
+                    </tr>`
+                  )
+                  .join("")}</tbody>
+              </table>`
+            : stateBlock("empty", "NO COORDINATED ENTRIES FOUND", "No other wallet repeatedly entered the same tokens within 2 blocks of this one.")
         }
       </div>
       <div class="panel-block">

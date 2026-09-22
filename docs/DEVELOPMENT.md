@@ -42,7 +42,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | `GET /api/tokens/:address/history` | persisted snapshot history for that token |
 | `GET /api/tokens/:address/signals` | signal timeline for that token |
 | `GET /api/tokens/:address/wallets` | wallet activity for that token (per-token scope) |
-| `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized/unrealized PnL, win rate and early-entry timing from price-at-trade; average holding period still NOT_YET_IMPLEMENTED |
+| `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized/unrealized PnL, win rate and early-entry timing from price-at-trade; average holding period, linked wallets |
 | `GET /api/brief` | FLETCH AI market brief — last hour across Robinhood Chain, from Radar + signals (cached 2 min) |
 | `GET /api/tokens/:address/ai-summary` | FLETCH AI analyst paragraph for a token whose report was just loaded (no second chain read) |
 | `GET /api/ai` | whether server-side AI is configured: `{ enabled, model }` |
@@ -144,7 +144,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-87.24% line coverage / 87.05% branch / 73.31% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+87.54% line coverage / 87.26% branch / 74.27% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
@@ -174,7 +174,7 @@ Roughly in priority order:
 3. Evaluate Bitquery for post-graduation Uniswap v4 pricing and decoded trade history — a `ChainDataProvider` swap, not a rewrite.
 4. ~~Record price-at-trade per wallet~~ — **done**: `wallet_trades` + `wallets/positions.ts` (see [DATA.md](./DATA.md#smart-money)).
 5. Decide on and wire a social data source, or keep it explicitly unavailable long-term.
-6. Wallet-clustering detection off existing transfer data.
+6. ~~Wallet-clustering detection~~ — **done**: `wallets/clusters.ts` (see [DATA.md](./DATA.md#smart-money)).
 7. ~~Batch per-launch RPC calls via multicall~~ — **done, opt-in** via a verified `MULTICALL3_ADDRESS` (see [MONITORING.md](./MONITORING.md)).
 8. ~~Automatic reactivation of a `FAILED` monitored token~~ — **done**, together with RPC rate-limit backoff (see [MONITORING.md](./MONITORING.md)).
-9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice.
+9. ~~A real DETECTED→STRENGTHENING→FADING signal lifecycle~~ — **done**, `signals/lifecycle.ts` (see [MONITORING.md](./MONITORING.md)).

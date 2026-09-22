@@ -10,6 +10,7 @@ function intel(over: Partial<WalletIntelligence> = {}): WalletIntelligence {
     wallet: W,
     profile: null,
     positions: [],
+    linkedWallets: [],
     metrics: {
       winRate: { availability: "UNAVAILABLE", reason: "no closed position" },
       realizedPnl: { availability: "UNAVAILABLE", reason: "no trades" },
@@ -31,8 +32,8 @@ test("REAL metrics are stated with their values; unavailable ones with FLETCH's 
     intel({
       profile: { wallet: W, tokensTouched: ["a", "b"], firstSeenAt: 1, lastSeenAt: 2, totalRecords: 3 },
       positions: [
-        { token: "a", status: "CLOSED", tradesCounted: 2, realizedPnlPair: 0.5, tokensHeld: 0, costBasisPair: 0, firstBlock: 1, lastBlock: 2 },
-        { token: "b", status: "UNKNOWN_COST_BASIS", tradesCounted: 1, realizedPnlPair: null, tokensHeld: 0, costBasisPair: null, firstBlock: 1, lastBlock: 1 },
+        { token: "a", status: "CLOSED", tradesCounted: 2, realizedPnlPair: 0.5, tokensHeld: 0, costBasisPair: 0, holdingBlocks: 1, firstBlock: 1, lastBlock: 2 },
+        { token: "b", status: "UNKNOWN_COST_BASIS", tradesCounted: 1, realizedPnlPair: null, tokensHeld: 0, costBasisPair: null, holdingBlocks: null, firstBlock: 1, lastBlock: 1 },
       ],
       metrics: {
         ...intel().metrics,
@@ -58,4 +59,17 @@ test("negative PnL keeps its sign", () => {
     })
   );
   assert.ok(facts.some((f) => f === "Realized PnL: -0.25 ETH."));
+});
+
+test("a coordinated-entry pattern is stated with its honest caveat", () => {
+  const facts = buildWalletFacts(
+    intel({
+      profile: { wallet: W, tokensTouched: ["a"], firstSeenAt: 1, lastSeenAt: 2, totalRecords: 1 },
+      linkedWallets: [{ wallet: "0xdddddddddddddddddddddddddddddddddddddddd", sharedTokens: 3, tokens: ["a", "b", "c"], maxBlockGap: 1 }],
+    })
+  );
+  const f = facts.find((x) => x.startsWith("Coordinated-entry pattern"))!;
+  assert.match(f, /1 other wallet\(s\)/);
+  assert.match(f, /0xdddd…dddd, 3 shared token/);
+  assert.match(f, /not proof of common ownership/);
 });

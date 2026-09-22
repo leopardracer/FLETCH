@@ -16,7 +16,8 @@ import { getTokenIntel } from "../intel/tokenIntel.js";
 import { analyzeAndPersist } from "../signals/signalService.js";
 import { pickTopSignal } from "../signals/types.js";
 import { getSnapshotHistory } from "../persistence/snapshots.js";
-import { getRecentSignals, getSignalsForToken } from "../persistence/signalsStore.js";
+import { getRecentSignals, getSignalsForToken, getSignalsForTokenSince } from "../persistence/signalsStore.js";
+import { computeLifecycles } from "../signals/lifecycle.js";
 import { getRadar } from "../radar/radarService.js";
 import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
 import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
@@ -294,7 +295,15 @@ export function createServer(options?: {
   app.get("/api/tokens/:address/signals", asyncRoute(async (req, res) => {
     const address = req.params.address as `0x${string}`;
     const limit = req.query.limit ? Math.min(200, Number(req.query.limit)) : 50;
-    res.json({ address, signals: getSignalsForToken(address, limit) });
+    const now = Math.floor(Date.now() / 1000);
+    const lifecycleWindow = RADAR_WINDOW_SECONDS_DEFAULT;
+    res.json({
+      address,
+      signals: getSignalsForToken(address, limit),
+      // Per signal type: DETECTED / STRENGTHENING / STEADY / FADING / RESOLVED — see signals/lifecycle.ts.
+      lifecycleWindowSeconds: lifecycleWindow,
+      lifecycle: computeLifecycles(getSignalsForTokenSince(address, now - 3 * lifecycleWindow), now, lifecycleWindow),
+    });
   }));
 
   // Wallet activity for a token — see data/providers/rpcProvider.ts for the

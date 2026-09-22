@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-331%20passing-D9316A?style=flat-square&labelColor=15050A">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-87.24%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-348%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-87.54%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-7-F5E8EC?style=flat-square&labelColor=15050A">
@@ -165,7 +165,7 @@ RISK
 
 ## Smart Money
 
-Per wallet, real: every curve buy/sell recorded with its exact price-at-trade, and from that realized PnL, unrealized PnL, win rate and early-entry timing — each computed only over history FLETCH saw gap-free from launch, and `UNAVAILABLE` with a reason otherwise (`GET /api/wallets/:address`). Not yet: a cross-wallet "smart money" ranking in the FLETCH Score (`src/wallets/smartMoney.ts` stays unavailable until enough real closed positions accumulate to rank). See [docs/DATA.md](./docs/DATA.md#smart-money).
+Per wallet, real: every curve buy/sell recorded with its exact price-at-trade, and from that realized PnL, unrealized PnL, win rate, early-entry timing, average holding period and linked (coordinated-entry) wallets — each computed only over history FLETCH saw gap-free from launch, and `UNAVAILABLE` with a reason otherwise (`GET /api/wallets/:address`). Not yet: a cross-wallet "smart money" ranking in the FLETCH Score (`src/wallets/smartMoney.ts` stays unavailable until enough real closed positions accumulate to rank). See [docs/DATA.md](./docs/DATA.md#smart-money).
 
 ## AI Layer
 
@@ -224,8 +224,8 @@ npm test
 ```
 
 ```
-tests 331
-pass 331
+tests 348
+pass 348
 fail 0
 ```
 
@@ -234,10 +234,10 @@ npm run test:coverage
 ```
 
 ```
-all files   |  87.24 |    87.05 |   73.31 |
+all files   |  87.54 |    87.26 |   74.27 |
 ```
 
-87.24% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+87.54% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
 npm run test:integration   # the five test files that exercise multiple layers together —
@@ -267,10 +267,10 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 3. Evaluate Bitquery for Uniswap v4 pricing and decoded trade history — a provider swap, not a rewrite
 4. ~~Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate~~ — **done**: real realized PnL and win rate per wallet, see [docs/DATA.md](./docs/DATA.md#smart-money)
 5. Decide on a social data source, or keep it honestly unavailable
-6. Wallet-clustering detection off existing transfer data
+6. ~~Wallet-clustering detection~~ — **done**: coordinated-entry linked wallets off recorded curve trades
 7. ~~Batch per-launch RPC calls via multicall~~ — **done, opt-in**: set a verified `MULTICALL3_ADDRESS`
 8. ~~Automatic reactivation of a `FAILED` monitored token after a cool-off~~ — **done**, plus RPC rate-limit backoff that never penalizes tokens
-9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice
+9. ~~A real DETECTED→STRENGTHENING→FADING signal lifecycle~~ — **done**, derived at read time, on Radar and every token
 
 </details>
 

@@ -56,7 +56,7 @@ Unchanged from the existing signal engine (`SIGNALS.md`): a signal only fires wh
 
 **Deduplication** already existed at the snapshot level (`SNAPSHOT_MIN_INTERVAL_SECONDS` — see `signals/signalService.ts`): a read that doesn't produce a new snapshot doesn't re-persist identical signal rows either. This monitoring layer doesn't change that; it's simply what generates the periodic reads that make the existing mechanism matter continuously instead of only on page views.
 
-**On the "DETECTED → STRENGTHENING → FADING → RESOLVED" lifecycle the brief describes as a possibility:** not implemented in this pass. The existing model (a fresh signal row per genuinely-changed comparison, deduplicated at the snapshot level) already satisfies the hard requirement — repeated snapshots of an unchanged condition do not spam the database — without needing a stateful lifecycle machine per signal. Adding explicit strengthening/fading tracking would mean comparing a *new* signal against the *previous* signal of the same type for the same token (not just the previous snapshot), which is a real, contained future addition if it turns out to matter; seeding it now without a concrete need would be exactly the "narrow this task will maintain forever" case worth avoiding.
+**Signal lifecycle — DETECTED → STRENGTHENING / STEADY → FADING → RESOLVED** (`src/signals/lifecycle.ts`). Derived at read time from the signal rows FLETCH already persists — no new table, no state machine to keep in sync, no chain reads. For each signal type on a token, the most recent window is compared against the one before it: DETECTED (fired now, not before), STRENGTHENING (more often than before, or at a higher severity), STEADY (about the same), FADING (less often, or silent now but seen within 3 windows), RESOLVED (silent for 3+ windows). The window is Radar's default (30 min). Surfaced on every Radar entry (`topSignalLifecycle`), on `GET /api/tokens/:address/signals` (`lifecycle`), on the dashboard's Radar cards and token signal timeline, and in the AI market brief. Descriptive only: STRENGTHENING means "happening more than it was", never a prediction that it continues. The storage-side dedup described above is unchanged.
 
 ## Recency
 
@@ -153,5 +153,4 @@ FLETCH is read-only. Nothing in this monitoring layer signs a transaction, holds
 **Real:** everything above — discovery, the monitoring queue, bounded concurrency, priority scheduling, failure tracking with a hard stop, phase tracking, the phase-transition guard, retention pruning, and the `/api/monitoring` counts.
 
 **Not built in this pass:**
-- The DETECTED→STRENGTHENING→FADING→RESOLVED signal lifecycle (see above — the simpler existing dedup mechanism already satisfies the hard requirement).
 - Verified support beyond ~1,000 tokens (see "Performance & scale" above).

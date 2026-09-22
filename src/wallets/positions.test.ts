@@ -18,6 +18,7 @@ test("buy then sell everything at a higher price → CLOSED, realized profit = p
   assert.equal(p.status, "CLOSED");
   assert.ok(Math.abs(p.realizedPnlPair! - 0.5) < 1e-12);
   assert.equal(p.tokensHeld, 0);
+  assert.equal(p.holdingBlocks, 10);
 });
 
 test("average cost across two buys at different prices is used for the sell", () => {

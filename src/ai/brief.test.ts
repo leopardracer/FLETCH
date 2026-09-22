@@ -17,6 +17,7 @@ function radar(token: string, symbol: string | null, name: string | null): Radar
   return {
     token: token as `0x${string}`, symbol, name, radarScore: 90, fletchScore: 70, riskLevel: "LOW",
     topSignal: { type: "WHALE_BUY_FROM_CURVE", severity: "HIGH", confidence: 80, evidence: "52,400 tokens", explanation: "A whale bought off the curve.", timestamp: NOW },
+    topSignalLifecycle: { type: "WHALE_BUY_FROM_CURVE", stage: "STRENGTHENING", recentCount: 2, previousCount: 1, firstSeenAt: NOW - 3000, lastSeenAt: NOW, peakSeverityRecent: "HIGH" },
     whyNow: [], distinctSignalTypes: 3, convergenceMultiplier: 1.5, lastSignalAt: NOW,
     metrics: { holderCount: 10, liquidityUsd: 1000, buyCountWindow: 5, sellCountWindow: 1 },
     dataAvailability: { symbol: "REAL", fletchScore: "REAL" },
@@ -58,6 +59,8 @@ test("SECURITY: radar tokens are named by short address only — a deployer's sy
   assert.equal(all.includes(hostile), false);
   assert.ok(all.includes(shortAddress(T1)));
   assert.match(all, /Radar #1: token 0x1111…1111 — A whale bought off the curve\. \(52,400 tokens\)/);
+  assert.match(all, /that signal is STRENGTHENING \(2 in the last window vs 1 before\)/);
+  assert.match(all, /that signal is STRENGTHENING \(2 in the last window vs 1 before\)/);
 });
 
 test("the brief sends exactly the fact list to the model and tags the result", async () => {

@@ -32,6 +32,8 @@ export interface Position {
   tokensHeld: number;
   /** Pair-asset cost of the tokens still held (average-cost); 0 when closed, null when unknown. */
   costBasisPair: number | null;
+  /** Blocks from first buy to full exit — CLOSED positions only, null otherwise. */
+  holdingBlocks: number | null;
   firstBlock: number;
   lastBlock: number;
 }
@@ -82,7 +84,7 @@ export function computePositions(
     const first = tokenTrades[0].blockNumber;
     const last = tokenTrades[tokenTrades.length - 1].blockNumber;
     if (unknownBasis) {
-      positions.push({ token, status: "UNKNOWN_COST_BASIS", tradesCounted: tokenTrades.length, realizedPnlPair: null, tokensHeld: 0, costBasisPair: null, firstBlock: first, lastBlock: last });
+      positions.push({ token, status: "UNKNOWN_COST_BASIS", tradesCounted: tokenTrades.length, realizedPnlPair: null, tokensHeld: 0, costBasisPair: null, holdingBlocks: null, firstBlock: first, lastBlock: last });
       continue;
     }
     const closed = peak > 0 && held <= peak * CLOSED_DUST_FRACTION;
@@ -93,6 +95,7 @@ export function computePositions(
       realizedPnlPair: realized,
       tokensHeld: closed ? 0 : held,
       costBasisPair: closed ? 0 : costBasis,
+      holdingBlocks: closed ? last - first : null,
       firstBlock: first,
       lastBlock: last,
     });

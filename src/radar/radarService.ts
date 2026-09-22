@@ -1,3 +1,4 @@
+import { computeLifecycles, type SignalLifecycle } from "../signals/lifecycle.js";
 import { getDistinctTokensWithRecentSignals, getSignalsForTokenSince } from "../persistence/signalsStore.js";
 import { getLatestSnapshot, type TokenSnapshot } from "../persistence/snapshots.js";
 import { readTokenInfo } from "../chain/token.js";
@@ -12,6 +13,8 @@ export interface RadarEntry {
   fletchScore: number | null;
   riskLevel: RiskLevel | null;
   topSignal: RadarResult["topSignal"];
+  /** Where the top signal's type is in its lifecycle (signals/lifecycle.ts) — DETECTED, STRENGTHENING, ... */
+  topSignalLifecycle: SignalLifecycle | null;
   whyNow: string[];
   distinctSignalTypes: number;
   convergenceMultiplier: number;
@@ -51,6 +54,9 @@ export async function getRadar(windowSeconds: number = RADAR_WINDOW_SECONDS_DEFA
       if (!result) return null; // filtered again defensively — see radarEngine's own window filter
 
       const snapshot: TokenSnapshot | null = getLatestSnapshot(token);
+      const lifecycle = computeLifecycles(getSignalsForTokenSince(token, now - 3 * windowSeconds), now, windowSeconds).find(
+        (l) => l.type === result.topSignal.type
+      ) ?? null;
       const info = await readTokenInfo(token).catch(() => null);
 
       const entry: RadarEntry = {
@@ -61,6 +67,7 @@ export async function getRadar(windowSeconds: number = RADAR_WINDOW_SECONDS_DEFA
         fletchScore: snapshot?.fletchScore ?? null,
         riskLevel: snapshot?.riskLevel ?? null,
         topSignal: result.topSignal,
+        topSignalLifecycle: lifecycle,
         whyNow: explainRadar(result),
         distinctSignalTypes: result.distinctSignalTypes,
         convergenceMultiplier: result.convergenceMultiplier,
