@@ -655,7 +655,7 @@
       ROADMAP FLETCH
     </div>
     <p style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin:0 0 24px;max-width:620px;">
-      Phase 1 already shipped, and it's the only phase that touches the chain. Everything after it is either already in the repository or blocked on one named, specific thing.
+      Phases 1, 3 and 4 are shipped and in the repository. Phase 2's code is written and waiting on one named thing outside FLETCH; Phase 5 needs an outside data provider.
     </p>
 
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
@@ -666,7 +666,7 @@
         </div>
         <span class="chip chip-low" style="flex:none;">DONE</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Discovery, risk, score, radar and continuous monitoring — reading Robinhood Chain directly. 238 tests, 84% line coverage, open source, MIT.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Discovery, risk, score, radar and continuous monitoring — reading Robinhood Chain directly. 274 tests, 85% line coverage, open source, MIT.</p>
     </div>
 
     <div class="card" style="border-left:3px solid var(--data);padding:16px 20px;margin-bottom:10px;">
@@ -686,31 +686,31 @@
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 2</div>
           <div style="font-family:var(--sans);font-weight:700;font-size:17px;">BLOCKSCOUT, LIVE</div>
         </div>
-        <span class="chip chip-high" style="flex:none;">BLOCKED</span>
+        <span class="chip chip-medium" style="flex:none;">CODE DONE · WAITING ON BLOCKSCOUT</span>
       </div>
       <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Code is written, RPC key is live — Blockscout's own PRO API returns Unauthorized for chain_id=4663 specifically (confirmed against multiple endpoint shapes, including their own Robinhood Chain quick-start example) despite the chain being listed as supported and the same key working fine on chain_id=1. Reported to Blockscout; picks back up once that's resolved on their end.</p>
     </div>
 
-    <div class="card" style="padding:16px 20px;margin-bottom:10px;">
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 3</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;">A TRUE BASELINE</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">A TRUE BASELINE</div>
         </div>
-        <span class="chip chip-medium soft-pulse" style="flex:none;">NEXT</span>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Thread each token's launch timestamp into the signal engine, so activity acceleration compares against a real lifetime average — not just the last snapshot.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Each token's real launch timestamp is threaded into the signal engine — activity acceleration now compares against the token's own lifetime average, not a single fixed threshold.</p>
     </div>
 
-    <div class="card" style="padding:16px 20px;margin-bottom:10px;">
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 4</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;">REAL SMART MONEY</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">PRICE-AT-TRADE, REAL PNL</div>
         </div>
-        <span class="chip" style="border-color:var(--line);color:var(--ink-dim);flex:none;">PLANNED</span>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Record price-at-trade in wallet activity — the one specific piece currently blocking real PnL and win-rate, honestly UNAVAILABLE today.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Every curve buy and sell is recorded per wallet with its exact price-at-trade — real realized PnL and win rate, computed only over history FLETCH saw from launch. Zero extra RPC calls. docs/DATA.md</p>
     </div>
 
     <div class="card" style="padding:16px 20px;margin-bottom:10px;">
