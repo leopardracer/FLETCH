@@ -166,6 +166,107 @@ test("activity acceleration reports a real trades-per-minute rate derived from t
   assert.match(accel!.evidence, /35 trades in the last 10m \(3\.5\/min\)/);
 });
 
+test("REGRESSION: a young token (launched under an hour ago) never gets a baseline comparison, even with history — young-token fallback stays exactly as before", () => {
+  const prev = snapshot({ buyCountWindow: 10, sellCountWindow: 5, takenAt: NOW - 600 });
+  const history = [
+    snapshot({ buyCountWindow: 0, sellCountWindow: 0, takenAt: NOW - 1800 }),
+    snapshot({ buyCountWindow: 5, sellCountWindow: 2, takenAt: NOW - 1200 }),
+    prev,
+  ];
+  const signals = detectSignals({
+    metrics: metrics({ buyCountWindow: 40, sellCountWindow: 10 }),
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    launchTimestamp: NOW - 1800, // 30 minutes old — under MIN_LAUNCH_AGE_FOR_BASELINE_SECONDS (1h)
+    snapshotHistory: history,
+    now: NOW,
+  });
+  const accel = signals.find((s) => s.type === "ACTIVITY_ACCELERATION");
+  assert.ok(accel);
+  // Fixed-threshold evidence format, not the baseline-comparison one
+  assert.match(accel!.evidence, /35 trades in the last 10m \(3\.5\/min\)$/);
+  assert.doesNotMatch(accel!.evidence, /lifetime average/);
+});
+
+test("a mature, well-observed token compares against its own real lifetime average instead of a fixed threshold", () => {
+  // Lifetime history: 0 -> 6 -> 12 trades over 120 min = exactly 0.10/min baseline
+  const history = [
+    snapshot({ buyCountWindow: 0, sellCountWindow: 0, takenAt: NOW - 7800 }),
+    snapshot({ buyCountWindow: 4, sellCountWindow: 2, takenAt: NOW - 3600 }),
+  ];
+  const prev = snapshot({ buyCountWindow: 8, sellCountWindow: 4, takenAt: NOW - 600 }); // +6 since previous point
+  const signals = detectSignals({
+    metrics: metrics({ buyCountWindow: 16, sellCountWindow: 8 }), // +12 trades over 10 min = 1.2/min = 12x the 0.10/min baseline
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    launchTimestamp: NOW - 14400, // 4 hours old — comfortably past the 1h eligibility bar
+    snapshotHistory: [...history, prev],
+    now: NOW,
+  });
+  const accel = signals.find((s) => s.type === "ACTIVITY_ACCELERATION");
+  assert.ok(accel);
+  assert.equal(accel!.severity, "HIGH"); // multiplier >= 8x
+  assert.match(accel!.evidence, /lifetime average of 0\.10\/min/);
+  assert.match(accel!.evidence, /12\.0x/);
+});
+
+test("a mature token trading near its own normal pace does NOT fire acceleration, even though the current rate alone would have cleared the old fixed threshold", () => {
+  // Lifetime baseline is a genuinely busy ~6.4/min token; current rate (2.5/min) is
+  // actually below that baseline — old fixed rule (>=2/min = MEDIUM) would have
+  // fired regardless of context; the baseline-aware version correctly doesn't.
+  const history = [
+    snapshot({ buyCountWindow: 0, sellCountWindow: 0, takenAt: NOW - 10800 }),
+    snapshot({ buyCountWindow: 180, sellCountWindow: 180, takenAt: NOW - 7200 }),
+    snapshot({ buyCountWindow: 360, sellCountWindow: 360, takenAt: NOW - 3600 }),
+  ];
+  const prev = snapshot({ buyCountWindow: 540, sellCountWindow: 540, takenAt: NOW - 600 });
+  const signals = detectSignals({
+    metrics: metrics({ buyCountWindow: 552, sellCountWindow: 553 }), // +25 trades over 10min = 2.5/min
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    launchTimestamp: NOW - 14400,
+    snapshotHistory: [...history, prev],
+    now: NOW,
+  });
+  assert.equal(signals.some((s) => s.type === "ACTIVITY_ACCELERATION"), false);
+});
+
+test("no launchTimestamp at all (enrichment failed) falls back to the fixed threshold, never crashes or silently drops the signal", () => {
+  const prev = snapshot({ buyCountWindow: 10, sellCountWindow: 5, takenAt: NOW - 600 });
+  const signals = detectSignals({
+    metrics: metrics({ buyCountWindow: 40, sellCountWindow: 10 }),
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    launchTimestamp: null,
+    snapshotHistory: [prev, snapshot({ buyCountWindow: 2, takenAt: NOW - 7200 }), snapshot({ buyCountWindow: 5, takenAt: NOW - 3600 })],
+    now: NOW,
+  });
+  const accel = signals.find((s) => s.type === "ACTIVITY_ACCELERATION");
+  assert.ok(accel);
+  assert.doesNotMatch(accel!.evidence, /lifetime average/);
+});
+
+test("a near-zero lifetime baseline (rounds to ~0/min) is treated as no usable baseline, not an absurd multiplier", () => {
+  // 1 trade total over 4 hours ≈ 0.004/min — below MIN_BASELINE_RATE_PER_MINUTE
+  const history = [
+    snapshot({ buyCountWindow: 0, sellCountWindow: 0, takenAt: NOW - 14400 }),
+    snapshot({ buyCountWindow: 1, sellCountWindow: 0, takenAt: NOW - 7200 }),
+  ];
+  const prev = snapshot({ buyCountWindow: 1, sellCountWindow: 0, takenAt: NOW - 600 });
+  const signals = detectSignals({
+    metrics: metrics({ buyCountWindow: 4, sellCountWindow: 4 }), // +7 trades over 10min
+    risk: CLEAN_RISK,
+    previousSnapshot: prev,
+    launchTimestamp: NOW - 14400,
+    snapshotHistory: [...history, prev],
+    now: NOW,
+  });
+  const accel = signals.find((s) => s.type === "ACTIVITY_ACCELERATION");
+  assert.ok(accel);
+  // Falls back to the fixed-threshold format rather than reporting a wild multiplier off a near-zero baseline
+  assert.doesNotMatch(accel!.evidence, /lifetime average/);
+});
+
 test("every signal timestamp equals the injected `now`, never a live clock read inside detection", () => {
   const signals = detectSignals({ metrics: metrics({ buyCountWindow: 10, sellCountWindow: 1 }), risk: CLEAN_RISK, previousSnapshot: null, now: NOW });
   assert.ok(signals.every((s) => s.timestamp === NOW));

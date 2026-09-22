@@ -1,4 +1,4 @@
-import { getPreviousSnapshot, recordSnapshot } from "../persistence/snapshots.js";
+import { getPreviousSnapshot, getSnapshotHistory, recordSnapshot } from "../persistence/snapshots.js";
 import { recordSignal } from "../persistence/signalsStore.js";
 import { detectSignals } from "./signalEngine.js";
 import { analyzeRisk, type RiskReport } from "../risk/riskAnalysis.js";
@@ -40,7 +40,20 @@ export function analyzeAndPersist(
   const previousSnapshot = getPreviousSnapshot(token, COMPARISON_WINDOW_SECONDS, now);
   const risk = analyzeRisk(launch, metrics, previousSnapshot);
   const score = computeFletchScore(metrics, risk, smartMoney, social, previousSnapshot, launch?.curve);
-  const signals = detectSignals({ metrics, risk, curveAddress: launch?.curve, previousSnapshot, now });
+  // Full history (not just the one previousSnapshot) is what lets
+  // ACTIVITY_ACCELERATION compare against this token's own real lifetime
+  // average instead of only the last check — see signalEngine.ts's
+  // eligibility gate for when that baseline is actually trusted.
+  const snapshotHistory = getSnapshotHistory(token);
+  const signals = detectSignals({
+    metrics,
+    risk,
+    curveAddress: launch?.curve,
+    previousSnapshot,
+    launchTimestamp: launch?.launchTimestamp,
+    snapshotHistory,
+    now,
+  });
 
   // Signals are only persisted alongside a genuinely new snapshot — otherwise a
   // rapid repeat read (same rate-limit window) would re-file identical signal

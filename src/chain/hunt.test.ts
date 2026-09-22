@@ -84,3 +84,40 @@ test("deployerLaunchCountInWindow is passed through unchanged — it's computed 
   const result = await enrichOneLaunch(rawLog(), 7, failingFetch);
   assert.equal(result.deployerLaunchCountInWindow, 7);
 });
+
+test("a successful timestamp read fills in the real launchTimestamp, independent of enrichment", async () => {
+  const cleanFetch = async () => ({ buyLogsInTx: [], exemptLogsInTx: [] });
+  const fakeTimestamp = async () => 1_700_000_000;
+  const result = await enrichOneLaunch(rawLog(), 1, cleanFetch, fakeTimestamp);
+  assert.equal(result.launchTimestamp, 1_700_000_000);
+});
+
+test("REGRESSION: a failed timestamp read (rate limit, RPC blip) leaves launchTimestamp null but still returns the real launch — never fabricated, never drops the launch", async () => {
+  const cleanFetch = async () => ({ buyLogsInTx: [], exemptLogsInTx: [] });
+  const failingTimestamp = async (): Promise<never> => {
+    throw new Error("Too Many Requests");
+  };
+  const result = await enrichOneLaunch(rawLog(), 1, cleanFetch, failingTimestamp);
+  assert.equal(result.launchTimestamp, null);
+  assert.equal(result.token, rawLog().args.token); // the launch itself is still there
+});
+
+test("REGRESSION: the timestamp read and the enrichment read fail independently — one failing never drags the other down with it", async () => {
+  const failingEnrichment = async (): Promise<never> => {
+    throw new Error("enrichment rate limited");
+  };
+  const fakeTimestamp = async () => 1_700_000_000;
+  // Enrichment fails, timestamp succeeds:
+  const a = await enrichOneLaunch(rawLog(), 1, failingEnrichment, fakeTimestamp);
+  assert.equal(a.devBuyTokens, null); // enrichment's failure
+  assert.equal(a.launchTimestamp, 1_700_000_000); // timestamp still succeeded
+
+  // Enrichment succeeds, timestamp fails:
+  const cleanFetch = async () => ({ buyLogsInTx: [], exemptLogsInTx: [] });
+  const failingTimestamp = async (): Promise<never> => {
+    throw new Error("timestamp rate limited");
+  };
+  const b = await enrichOneLaunch(rawLog(), 1, cleanFetch, failingTimestamp);
+  assert.equal(b.exemptWalletCount, 0); // enrichment still succeeded (real, confirmed zero)
+  assert.equal(b.launchTimestamp, null); // timestamp's failure
+});

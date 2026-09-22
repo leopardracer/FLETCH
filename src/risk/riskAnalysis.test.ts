@@ -17,6 +17,7 @@ function launch(overrides: Partial<DetectedLaunch> = {}): DetectedLaunch {
     devBuyTaxBps: null,
     exemptWalletCount: 0,
     deployerLaunchCountInWindow: 1,
+    launchTimestamp: null,
     ...overrides,
   };
 }

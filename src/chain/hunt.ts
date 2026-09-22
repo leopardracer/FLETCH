@@ -19,6 +19,14 @@ export interface DetectedLaunch {
    *  wallets, confirmed". See enrichOneLaunch. */
   exemptWalletCount: number | null;
   deployerLaunchCountInWindow: number;
+  /** Real unix-seconds timestamp of launchBlock, read via a single
+   *  eth_getBlockByNumber call — not estimated from block number and
+   *  an assumed block time (Robinhood Chain's Nitro block times aren't
+   *  perfectly uniform). null = that one call failed (rate limit, RPC
+   *  blip) — same "never drop the launch over one failed field" rule
+   *  as devBuyTokens/exemptWalletCount above. See signals/signalEngine.ts
+   *  for what this threads into: the ACTIVITY_ACCELERATION baseline. */
+  launchTimestamp: number | null;
 }
 
 interface RawLaunchLog {
@@ -59,6 +67,18 @@ async function fetchLaunchEnrichment(curve: `0x${string}`, blockNumber: bigint):
   return { buyLogsInTx, exemptLogsInTx };
 }
 
+/** Reads one block's real unix-seconds timestamp — a single
+ *  eth_getBlockByNumber call, not a log scan, so it never runs into the
+ *  eth_getLogs range caps that hit fetchLaunchEnrichment/log replay on a
+ *  rate-limited RPC. Its own function purely so enrichOneLaunch's
+ *  resilience to it failing is independently testable with a fake — same
+ *  pattern as fetchLaunchEnrichment above. */
+async function fetchBlockTimestamp(blockNumber: bigint): Promise<number> {
+  const client = getClient();
+  const block = await client.getBlock({ blockNumber });
+  return Number(block.timestamp);
+}
+
 /**
  * Builds one DetectedLaunch from a real TokenLaunched log. The launch
  * itself (token/curve/deployer/pairToken/graduationThreshold/block/tx) is
@@ -80,12 +100,14 @@ async function fetchLaunchEnrichment(curve: `0x${string}`, blockNumber: bigint):
 export async function enrichOneLaunch(
   log: RawLaunchLog,
   deployerLaunchCountInWindow: number,
-  fetchEnrichment: (curve: `0x${string}`, blockNumber: bigint) => Promise<LaunchEnrichment> = fetchLaunchEnrichment
+  fetchEnrichment: (curve: `0x${string}`, blockNumber: bigint) => Promise<LaunchEnrichment> = fetchLaunchEnrichment,
+  fetchTimestamp: (blockNumber: bigint) => Promise<number> = fetchBlockTimestamp
 ): Promise<DetectedLaunch> {
   const args = log.args;
   let devBuyTokens: number | null = null;
   let devBuyTaxBps: number | null = null;
   let exemptWalletCount: number | null = null;
+  let launchTimestamp: number | null = null;
 
   try {
     const { buyLogsInTx, exemptLogsInTx } = await fetchEnrichment(args.curve, log.blockNumber!);
@@ -104,6 +126,15 @@ export async function enrichOneLaunch(
     // The launch itself is still real and still returned below.
   }
 
+  try {
+    launchTimestamp = await fetchTimestamp(log.blockNumber!);
+  } catch {
+    // Independent of the enrichment try/catch above on purpose: a rate
+    // limit that kills the two getLogs calls above shouldn't also be
+    // assumed to kill this unrelated single-block read, and vice versa —
+    // each field fails on its own, never drops the whole launch.
+  }
+
   return {
     token: args.token,
     curve: args.curve,
@@ -116,6 +147,7 @@ export async function enrichOneLaunch(
     devBuyTaxBps,
     exemptWalletCount,
     deployerLaunchCountInWindow,
+    launchTimestamp,
   };
 }
 

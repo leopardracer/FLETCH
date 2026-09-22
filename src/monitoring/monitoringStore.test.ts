@@ -138,6 +138,7 @@ test("a stored launch round-trips exactly, including its bigint fields (launchBl
     devBuyTaxBps: 9900,
     exemptWalletCount: 2,
     deployerLaunchCountInWindow: 1,
+    launchTimestamp: null,
   };
   upsertDiscovered(TOKEN_A, NOW, "HIGH", launch);
   const stored = getMonitoredToken(TOKEN_A);

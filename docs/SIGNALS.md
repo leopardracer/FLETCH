@@ -28,7 +28,7 @@ Every `Signal` has a `type`, `severity` (LOW/MEDIUM/HIGH/CRITICAL — see below)
 | `HOLDER_GROWTH` / `HOLDER_DECLINE` | holder count changed since the last snapshot |
 | `LIQUIDITY_INCREASE` / `LIQUIDITY_DECREASE` | liquidity moved ≥10% since the last snapshot |
 | `PRICE_UP` / `PRICE_DOWN` | price moved ≥5% since the last snapshot |
-| `ACTIVITY_ACCELERATION` | trade rate since the last snapshot is ≥0.5/min — reports the real observed rate, not a comparison to a historical baseline (see limitation below) |
+| `ACTIVITY_ACCELERATION` | trade rate is meaningfully above this token's own baseline — a real lifetime average when the token's old and observed enough to trust one, a fixed ≥0.5/min threshold otherwise (see below) |
 
 ## The comparison window
 
@@ -38,9 +38,17 @@ Every `Signal` has a `type`, `severity` (LOW/MEDIUM/HIGH/CRITICAL — see below)
 
 Persistence (`src/persistence/`, Node's built-in `node:sqlite`) records a snapshot on every token-page read (rate-limited by `SNAPSHOT_MIN_INTERVAL_SECONDS` so rapid repeat views don't spam near-duplicate rows) and, if `ENABLE_POLLER=true` and `RPC_URL` is set, on a background interval (`POLL_INTERVAL_MS`) across the most recently launched tokens (`POLL_TOKEN_LIMIT`). See `src/poller/poller.ts` and [DEVELOPMENT.md](./DEVELOPMENT.md).
 
-## Known limitation: activity acceleration isn't compared to a baseline
+## Activity acceleration: a real lifetime baseline, with an honest fallback
 
-`ACTIVITY_ACCELERATION` reports a real trades-per-minute rate between two snapshots — it does **not** compare that rate to the token's own historical average (true acceleration, a second derivative), because that would need the token's launch timestamp threaded through the signal engine, which isn't wired up yet. The evidence text says exactly what was measured ("N trades in the last Xm") rather than implying a baseline comparison that wasn't made.
+`ACTIVITY_ACCELERATION` compares the current trade rate against this token's own real lifetime average — computed in `signalEngine.ts`'s `computeLifetimeBaselineRate()` — instead of a single fixed threshold that means something different for a quiet token than a genuinely popular one. `DetectedLaunch.launchTimestamp` (`chain/hunt.ts`) is the real unix-seconds launch time, read via one `eth_getBlockByNumber` call per launch — not estimated from block number, and not a log scan, so it's unaffected by the `eth_getLogs` range caps that hit other parts of this codebase on a rate-limited RPC.
+
+The baseline is only trusted once both are true:
+- the token is at least `MIN_LAUNCH_AGE_FOR_BASELINE_SECONDS` (1 hour) old by its real launch timestamp — a token that's only been alive a few minutes doesn't have a meaningful "own pace" to compare against yet
+- FLETCH has at least `MIN_HISTORY_POINTS_FOR_BASELINE` (3) persisted snapshots for it, and the computed rate clears `MIN_BASELINE_RATE_PER_MINUTE` (0.02/min) — below that floor, a couple of real trades would compute as an absurd multiplier off a near-zero baseline, so it's treated as "no usable baseline" instead
+
+Below that bar — a young token, one FLETCH hasn't watched long enough yet, or `launchTimestamp` itself is `null` (the one-block read failed; same "unavailable, never fabricated" rule as `devBuyTokens`/`exemptWalletCount`) — `ACTIVITY_ACCELERATION` falls back to exactly its original fixed-threshold behavior (≥0.5/min), unchanged from before this baseline existed.
+
+**Honesty caveat worth keeping in mind:** the baseline's trade count is a sum of deltas between FLETCH's own recorded snapshots, so it's "this token's average rate since FLETCH started watching it," not literally "since on-chain launch," for a token FLETCH discovered well after it actually launched. In practice this rarely matters — the discovery poller picks up new launches quickly, so "first observed" and "launched" are usually close together — but it's the honest description of what's actually being measured, not a claim of perfect lifetime coverage.
 
 ## Not implemented
 

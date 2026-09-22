@@ -28,7 +28,61 @@ export interface DetectSignalsInput {
    *  window (see signalService.ts) — null means no trend signals fire,
    *  only point-in-time ones. */
   previousSnapshot: TokenSnapshot | null;
+  /** Real unix-seconds launch time (see chain/hunt.ts's DetectedLaunch),
+   *  not estimated from block number. null = unknown (enrichment read
+   *  failed, or no launch record at all) — ACTIVITY_ACCELERATION then
+   *  always uses its fixed-threshold fallback, never a guessed baseline. */
+  launchTimestamp?: number | null;
+  /** This token's full available snapshot history (any order — sorted
+   *  internally), used to compute a real lifetime-average trade rate for
+   *  ACTIVITY_ACCELERATION instead of comparing only against the single
+   *  previous snapshot. Honesty caveat, worth keeping in mind wherever
+   *  this baseline is surfaced: the trade count is a sum of deltas
+   *  between FLETCH's own recorded snapshots, so it's "average rate
+   *  since FLETCH started watching this token," not literally "since
+   *  on-chain launch" for a token FLETCH discovered well after it
+   *  launched — see the eligibility gate in detectSignals for how that's
+   *  kept from being misleading (a young-enough token skips the baseline
+   *  entirely rather than compute one from a mostly-unobserved lifetime). */
+  snapshotHistory?: TokenSnapshot[];
   now?: number; // unix seconds — injectable for deterministic tests
+}
+
+/** A token must be at least this old (real launch time, not first-seen)
+ *  before ACTIVITY_ACCELERATION trusts a lifetime-average baseline over
+ *  it — otherwise "this is its own baseline" is a trivial, meaningless
+ *  comparison for a token that's only been alive a few minutes. */
+const MIN_LAUNCH_AGE_FOR_BASELINE_SECONDS = 3600;
+/** Below this many snapshot data points, an "average" is a couple of
+ *  noisy samples, not a real baseline — falls back to the fixed
+ *  threshold instead of trusting it. */
+const MIN_HISTORY_POINTS_FOR_BASELINE = 3;
+/** A computed baseline below this floor is close enough to zero that
+ *  any small real number of trades would compute as an enormous, noisy
+ *  multiplier (e.g. 1 trade vs a 0.001/min baseline = "1000x") — treated
+ *  as "no usable baseline" rather than trusted at face value. */
+const MIN_BASELINE_RATE_PER_MINUTE = 0.02;
+
+/** Real lifetime-average trades/minute for this token, or null if the
+ *  token's too young or FLETCH doesn't have enough history to trust one
+ *  — see the constants above for the exact eligibility bar. Pure
+ *  function of already-known inputs; no chain calls, no clock reads. */
+function computeLifetimeBaselineRate(launchTimestamp: number | null | undefined, history: TokenSnapshot[] | undefined, now: number): number | null {
+  if (!launchTimestamp || !history || history.length < MIN_HISTORY_POINTS_FOR_BASELINE) return null;
+  if (now - launchTimestamp < MIN_LAUNCH_AGE_FOR_BASELINE_SECONDS) return null;
+
+  const sorted = [...history].sort((a, b) => a.takenAt - b.takenAt);
+  let totalTrades = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const delta = sorted[i].buyCountWindow + sorted[i].sellCountWindow - (sorted[i - 1].buyCountWindow + sorted[i - 1].sellCountWindow);
+    if (delta > 0) totalTrades += delta; // a negative delta means the window itself reset/shrank, not negative trades — never subtracted
+  }
+
+  const spanMinutes = (sorted[sorted.length - 1].takenAt - sorted[0].takenAt) / 60;
+  if (spanMinutes <= 0) return null;
+
+  const rate = totalTrades / spanMinutes;
+  return rate >= MIN_BASELINE_RATE_PER_MINUTE ? rate : null;
 }
 
 /**
@@ -176,7 +230,30 @@ export function detectSignals(input: DetectSignalsInput): Signal[] {
     const recentTx = metrics.buyCountWindow + metrics.sellCountWindow - (previousSnapshot.buyCountWindow + previousSnapshot.sellCountWindow);
     if (recentTx > 0) {
       const rate = recentTx / elapsedMinutes;
-      if (rate >= 0.5) {
+      const baselineRate = computeLifetimeBaselineRate(input.launchTimestamp, input.snapshotHistory, now);
+
+      if (baselineRate !== null && recentTx >= 3) {
+        // Real baseline available and trusted (see eligibility gate above)
+        // — compare this token against its own history instead of a
+        // fixed rate that means something different for a quiet token
+        // than a genuinely popular one.
+        const multiplier = rate / baselineRate;
+        if (multiplier >= 2) {
+          signals.push(
+            sig(
+              "ACTIVITY_ACCELERATION",
+              multiplier >= 8 ? "HIGH" : multiplier >= 4 ? "MEDIUM" : "LOW",
+              trendConfidence,
+              `${recentTx} trades in the last ${elapsedMinutes.toFixed(0)}m (${rate.toFixed(1)}/min) — ${multiplier.toFixed(1)}x this token's own lifetime average of ${baselineRate.toFixed(2)}/min`,
+              "Trading activity is running well above this token's own historical pace, not just the last check.",
+              now
+            )
+          );
+        }
+      } else if (rate >= 0.5) {
+        // Fallback: token too young / too little history for a trusted
+        // baseline (see computeLifetimeBaselineRate) — same fixed
+        // thresholds this always used, not a regression for that case.
         signals.push(
           sig(
             "ACTIVITY_ACCELERATION",

@@ -41,6 +41,7 @@ function fakeLaunch(token: `0x${string}`, overrides: Partial<DetectedLaunch> = {
     devBuyTaxBps: 9900,
     exemptWalletCount: 0,
     deployerLaunchCountInWindow: 1,
+    launchTimestamp: null,
     ...overrides,
   };
 }
