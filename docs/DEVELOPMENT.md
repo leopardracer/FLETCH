@@ -85,7 +85,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 234 tests across 24 files |
+| `npm test` | The full suite — 238 tests across 24 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -141,7 +141,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-84.29% line coverage / 85.24% branch / 65.74% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+84.49% line coverage / 85.38% branch / 66.01% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
