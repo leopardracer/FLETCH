@@ -91,9 +91,25 @@ Up to `maxTurns` (default 4) round-trips: send the conversation, execute any `to
 
 `src/ai/rephrase.test.ts` and `src/ai/chatAgent.test.ts` inject a fake Anthropic client (and, for the agent, fake `AgentDeps`) — no real network call, no `ANTHROPIC_API_KEY` needed to run the suite. Same isolation principle `api/server.test.ts` already uses for `RPC_URL`.
 
+## BYOK: chatting from the dashboard with your own key
+
+`web/chatAgent.js` + the **Chat** tab in `web/app.js`/`index.html`. A third way to reach the chat agent, alongside `POST /api/chat` (server-side, needs the operator's `ANTHROPIC_API_KEY`) — this one needs no server-side key at all.
+
+The visitor pastes their own Anthropic key into the Chat tab. From that point on, the Anthropic call happens **directly from their browser tab** to `api.anthropic.com`, using the `anthropic-dangerous-direct-browser-access` header Anthropic documents for exactly this pattern. FLETCH's server never receives that key — it isn't sent to any `fletch.*`/`/api/*` endpoint, only to Anthropic's own domain. The key is kept in that tab's `sessionStorage` only: gone on tab close, never written anywhere durable, never round-tripped through FLETCH at all.
+
+**What still goes through the server:** the tool calls themselves. `get_token_report`/`get_wallet_report`/`get_radar` call FLETCH's own same-origin `GET /api/tokens/:address`, `/api/wallets/:address`, `/api/radar` — the real deterministic engine, chain RPC access, and persistence are unchanged; only the "who holds the AI key and pays for the call" boundary moves to the visitor. This also means BYOK chat only works at all if the *operator's* `RPC_URL` is configured — Radar and token lookups still need a working chain connection server-side, same as the rest of the dashboard.
+
+**Same defenses, ported, not reinvented.** `web/chatAgent.js` carries its own copies of `SYSTEM_PROMPT`, `fenceTokenIntel()`/`fenceRadarEntries()`, and the `<<UNTRUSTED_ONCHAIN_STRING>>` markers — deliberately kept in lockstep with `src/ai/chatAgent.ts` rather than sharing a module, since one runs in Node and the other ships as-is to a browser with no build step. A change to the fencing/prompt rules on one side without the other is a real drift risk worth watching for in review.
+
+**Trade-off worth stating in the UI, and stated there:** a key typed into a browser is visible in that tab's own network requests (devtools, browser extensions with broad permissions). That's inherent to any BYOK-in-browser pattern, not a FLETCH-specific weakness — the Chat tab says this plainly before the key field, not just here.
+
+**Testing:** `scripts/chatAgentSmoke.mjs` (`npm run smoke:chat`) — loads the real `web/chatAgent.js` into a Node process with only the `api.anthropic.com` fetch faked; every FLETCH tool call goes to a real running server (`npm run dev` in another terminal first). Checks: a plain-text reply needs no tool call; `get_wallet_report` round-trips real data from the live server; `get_token_report` against a server with no `RPC_URL` produces an honest `{error}` tool_result, never fabricated data; a 401 from Anthropic and a network failure both degrade to a plain message instead of throwing; no key means Anthropic is never called at all; and the fencing functions/markers are structurally present (a guard against silently deleting the mitigation, not a full injection test — that lives in `chatAgent.test.ts` against the server-side copy). Not part of `npm test`, same reason `scripts/screenshot.mjs` isn't — both need a live server process running first.
+
 ## Not built in this pass
 
 - **Streaming.** `POST /api/chat` returns the full reply in one response; no SSE/streaming endpoint yet.
 - **Conversation persistence.** Each request carries its own full `messages` history from the caller — nothing is stored server-side between requests.
 - **Rate limiting specific to chat.** `/api/chat` sits under the same `/api/*` limiter as everything else (`RATE_LIMIT_WINDOW_MS`/`RATE_LIMIT_MAX`), not a separate, tool-use-aware budget — a single chat conversation with several tool-calling turns counts as several requests against that shared limit.
 - **Tools beyond the three above** (e.g. `get_signals`, `get_snapshot_history`) — straightforward to add following the same pattern (wrap an existing real function, validate input, never compute anything new) if a real use case needs them.
+- **A shared module between `src/ai/chatAgent.ts` and `web/chatAgent.js`.** Noted above under BYOK: the two copies of `SYSTEM_PROMPT`/fencing are kept in sync by hand. A build step that generated the browser copy from the server one (or vice versa) would remove that drift risk; not built here since `web/` has no build step at all today.
+- **BYOK rate limiting.** The Chat tab's calls to FLETCH's own `/api/tokens|wallets|radar` endpoints sit under the normal `/api/*` limiter same as any dashboard page view — reasonable for one visitor clicking around, not evaluated for many BYOK chat sessions running concurrently.

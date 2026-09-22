@@ -169,12 +169,13 @@ Not implemented as real intelligence yet — and the dashboard says so, in `src/
 
 ## AI Layer
 
-Two optional, off-by-default features, both built on **rephrase/report**, never **generate**: the model never sees raw chain data and is never asked to reason about whether a token is good or bad from scratch.
+Three optional, off-by-default features, all built on **rephrase/report**, never **generate**: the model never sees raw chain data and is never asked to reason about whether a token is good or bad from scratch.
 
-- **Natural-language summary** (`GET /api/tokens/:address?summary=ai`) rephrases the same deterministic bullets from [Why is it moving?](#why-is-it-moving) into one paragraph — same "never see raw numbers, only rephrase what's already computed" rule, via a real LLM call.
-- **Chat agent** (`POST /api/chat`) answers questions about a token or wallet by calling FLETCH's own real functions as tools and reporting back only what they returned — the same `getTokenIntel()` the token API itself calls, so the agent can't report a different number than the dashboard does.
+- **Natural-language summary** (`GET /api/tokens/:address?summary=ai`) rephrases the same deterministic bullets from [Why is it moving?](#why-is-it-moving) into one paragraph — same "never see raw numbers, only rephrase what's already computed" rule, via a real LLM call. Needs the operator's `ANTHROPIC_API_KEY`.
+- **Chat agent** (`POST /api/chat`) answers questions about a token or wallet by calling FLETCH's own real functions as tools and reporting back only what they returned — the same `getTokenIntel()` the token API itself calls, so the agent can't report a different number than the dashboard does. Also needs the operator's key.
+- **Chat, bring your own key** (the dashboard's **Chat** tab) — same agent, but the Anthropic call happens straight from your browser tab with a key you paste in yourself. FLETCH's server never sees it. No server-side `ANTHROPIC_API_KEY` needed for this path at all; the operator only needs `RPC_URL` configured, since the tool calls still read real chain data through FLETCH's own API.
 
-Both require `ANTHROPIC_API_KEY`; without it, they degrade to "field omitted" / "chat not configured" rather than throwing or faking a response. Full writeup: [docs/AI.md](./docs/AI.md).
+The two server-side features degrade to "field omitted" / "chat not configured" without a key, rather than throwing or faking a response. Full writeup: [docs/AI.md](./docs/AI.md).
 
 ## Architecture
 

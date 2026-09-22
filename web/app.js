@@ -8,6 +8,7 @@ const NAV = [
   { id: "tokens", label: "Tokens" },
   { id: "wallets", label: "Wallets" },
   { id: "risk", label: "Risk" },
+  { id: "chat", label: "Chat" },
   { id: "monitoring", label: "Monitoring" },
   { id: "docs", label: "Docs" },
 ];
@@ -686,6 +687,122 @@ async function renderToken(address) {
   }
 }
 
+const CHAT_KEY_STORAGE = "fletch_byok_anthropic_key";
+let chatMessages = []; // kept at module scope so it survives navigating away and back within this tab
+
+function chatBubble(role, text) {
+  return `<div class="chat-msg chat-${role}"><div class="chat-bubble">${text}</div></div>`;
+}
+
+function chatToolCallsLine(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return "";
+  const names = toolCalls.map((t) => t.name).join(", ");
+  return `<div class="chat-toolcalls">FLETCH looked up: ${names}</div>`;
+}
+
+function renderChatLog() {
+  const log = document.getElementById("chat-log");
+  if (!log) return;
+  if (chatMessages.length === 0) {
+    log.innerHTML = `<div class="chat-empty">Ask about a token or wallet address on Robinhood Chain.</div>`;
+    return;
+  }
+  log.innerHTML = chatMessages
+    .map((m) => {
+      if (m.role === "user") return chatBubble("user", typeof m.content === "string" ? m.content : "");
+      // assistant messages we render are plain strings; tool_use/tool_result turns aren't shown as bubbles
+      if (typeof m.content === "string") return chatBubble("assistant", m.content);
+      return "";
+    })
+    .join("");
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("chat-send");
+  const text = input.value.trim();
+  if (!text) return;
+  const apiKey = sessionStorage.getItem(CHAT_KEY_STORAGE) || "";
+
+  chatMessages.push({ role: "user", content: text });
+  input.value = "";
+  renderChatLog();
+
+  const log = document.getElementById("chat-log");
+  log.insertAdjacentHTML("beforeend", `<div class="chat-msg chat-assistant" id="chat-pending">${loadingLine("thinking")}</div>`);
+  log.scrollTop = log.scrollHeight;
+  sendBtn.disabled = true;
+
+  try {
+    const result = await window.FletchChatAgent.runBrowserChatAgent(chatMessages, apiKey);
+    chatMessages.push({ role: "assistant", content: result.reply });
+    renderChatLog();
+    if (result.toolCalls && result.toolCalls.length) {
+      document.getElementById("chat-log").insertAdjacentHTML("beforeend", chatToolCallsLine(result.toolCalls));
+    }
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function saveChatKey() {
+  const input = document.getElementById("chat-api-key");
+  const status = document.getElementById("chat-key-status");
+  const key = input.value.trim();
+  if (!key) {
+    sessionStorage.removeItem(CHAT_KEY_STORAGE);
+    status.textContent = "";
+    return;
+  }
+  sessionStorage.setItem(CHAT_KEY_STORAGE, key);
+  input.value = "";
+  input.placeholder = "•••• saved for this tab";
+  status.textContent = "Key saved for this browser tab only — cleared when you close it. Never sent to FLETCH's server.";
+}
+
+function renderChat() {
+  renderNav("chat");
+  const hasKey = !!sessionStorage.getItem(CHAT_KEY_STORAGE);
+  app.innerHTML = `
+    <div class="section-head">
+      <div><h1>Chat</h1><p>Ask about a token or wallet. This runs entirely in your browser with your own Anthropic API key — FLETCH's server never sees it and never stores anything typed here. See <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" target="_blank" rel="noopener">docs/AI.md</a>.</p></div>
+    </div>
+
+    <div class="panel-block">
+      <h2>Your Anthropic API key</h2>
+      <p style="color:var(--ink-faint);font-size:12.5px;margin:0 0 10px">
+        Calls go straight from this browser tab to api.anthropic.com. Your key is visible in this tab's network requests (devtools) — only paste a key you're fine placing in a browser session.
+        Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+      </p>
+      <div class="chat-key-row">
+        <input type="password" id="chat-api-key" placeholder="${hasKey ? "•••• saved for this tab" : "sk-ant-..."}" autocomplete="off" spellcheck="false" />
+        <button id="chat-key-save">Save for this tab</button>
+      </div>
+      <div id="chat-key-status" class="chat-key-status">${hasKey ? "Key saved for this browser tab only — cleared when you close it. Never sent to FLETCH's server." : ""}</div>
+    </div>
+
+    <div class="panel-block">
+      <div id="chat-log" class="chat-log"></div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" placeholder="Ask about a token or wallet address…" rows="2"></textarea>
+        <button id="chat-send">Send</button>
+      </div>
+    </div>
+  `;
+
+  renderChatLog();
+  document.getElementById("chat-key-save").addEventListener("click", saveChatKey);
+  document.getElementById("chat-send").addEventListener("click", sendChatMessage);
+  document.getElementById("chat-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+}
+
 async function renderWalletDetail(address) {
   renderNav(null);
   app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${loadingLine(fmtAddr(address))}`;
@@ -742,6 +859,8 @@ function route() {
     renderWalletsView();
   } else if (hash === "#/risk") {
     renderRiskView();
+  } else if (hash === "#/chat") {
+    renderChat();
   } else if (hash === "#/monitoring") {
     renderMonitoring();
   } else if (hash === "#/docs") {

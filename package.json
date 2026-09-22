@@ -29,7 +29,8 @@
     "test:coverage": "tsc -p tsconfig.json && node --test --experimental-test-coverage --test-coverage-exclude=\"**/*.test.js\" dist/**/*.test.js",
     "test:integration": "tsc -p tsconfig.json && node --test dist/signals/signalService.test.js dist/radar/radarService.test.js dist/monitoring/monitoringService.test.js dist/monitoring/monitoringService.stress.test.js dist/api/server.test.js",
     "lint": "eslint src",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "smoke:chat": "node scripts/chatAgentSmoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
