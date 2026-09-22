@@ -64,6 +64,9 @@ const envSchema = z.object({
   // localhost. Per IP, sliding window.
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().default(120),
+  // Separate, stricter per-IP cap on POST /api/chat — each request can cost a paid LLM call on the server's key.
+  CHAT_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900_000),
+  CHAT_RATE_LIMIT_MAX: z.coerce.number().default(20),
 
   // --- Optional: AI layer (src/ai/) ---
   // Unset by default — every AI feature (natural-language summaries, the
@@ -117,6 +120,8 @@ export const config = {
   maxHolderScanBlocks: BigInt(env.MAX_HOLDER_SCAN_BLOCKS),
   rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
   rateLimitMax: env.RATE_LIMIT_MAX,
+  chatRateLimitWindowMs: env.CHAT_RATE_LIMIT_WINDOW_MS,
+  chatRateLimitMax: env.CHAT_RATE_LIMIT_MAX,
   anthropicApiKey: env.ANTHROPIC_API_KEY || undefined,
   anthropicModel: env.ANTHROPIC_MODEL,
 

@@ -21,6 +21,7 @@ process.env.RPC_URL = "";
 process.env.BLOCKSCOUT_API_KEY = "";
 process.env.DB_PATH = ":memory:";
 process.env.ENABLE_POLLER = "false";
+process.env.ANTHROPIC_API_KEY = ""; // AI routes must work (deterministically) with no key — and never call out from tests
 
 const { createServer, buildHealthResponse } = await import("./server.js");
 
@@ -265,4 +266,66 @@ test("a static/dashboard path is never rate-limited by the /api limiter, even pa
   } finally {
     limitedServer.close();
   }
+});
+
+// ---------- AI routes ----------
+
+async function withServer<T>(opts: Parameters<typeof createServer>[0], fn: (base: string) => Promise<T>): Promise<T> {
+  const app = createServer(opts);
+  const srv = app.listen(0);
+  await new Promise<void>((resolve) => srv.once("listening", resolve));
+  const addr = srv.address();
+  try {
+    return await fn(`http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`);
+  } finally {
+    srv.close();
+  }
+}
+
+test("GET /api/ai reports the server AI as disabled with no key — never the key itself", async () => {
+  const res = await fetch(`${baseUrl}/api/ai`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body, { enabled: false, model: null });
+});
+
+test("GET /api/brief works with no key and no data: an honest 'nothing yet' fact, tagged as deterministic", async () => {
+  const res = await fetch(`${baseUrl}/api/brief`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.aiEnabled, false);
+  assert.equal(body.summary.source, "DETERMINISTIC_FALLBACK");
+  assert.ok(body.facts.length >= 1);
+  assert.match(body.summary.text, /hasn't recorded any on-chain activity|no on-chain signal fired/);
+});
+
+test("GET /api/wallets/:address?summary=ai adds the fact list and a summary, without changing the plain response", async () => {
+  const plain = await (await fetch(`${baseUrl}/api/wallets/${WALLET}`)).json();
+  const withAi = await (await fetch(`${baseUrl}/api/wallets/${WALLET}?summary=ai`)).json();
+  assert.equal("naturalLanguageSummary" in plain, false);
+  assert.equal(withAi.naturalLanguageSummary.source, "DETERMINISTIC_FALLBACK");
+  assert.match(withAi.naturalLanguageSummary.text, /no recorded activity/);
+  assert.deepEqual(withAi.metrics, plain.metrics);
+});
+
+test("GET /api/tokens/:address/ai-summary is a clean 404 until the token's report was actually loaded — it never invents facts on its own", async () => {
+  const res = await fetch(`${baseUrl}/api/tokens/${TOKEN}/ai-summary`);
+  assert.equal(res.status, 404);
+  const body = await res.json();
+  assert.match(body.error, /load GET \/api\/tokens\/:address first/);
+});
+
+test("POST /api/chat has its own stricter per-IP limit, separate from the general /api limit", async () => {
+  await withServer({ chatRateLimit: { windowMs: 60_000, limit: 2 } }, async (base) => {
+    const post = () =>
+      fetch(`${base}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      });
+    const statuses = [(await post()).status, (await post()).status, (await post()).status];
+    assert.deepEqual(statuses, [200, 200, 429]);
+    // other /api routes on the same server are unaffected
+    assert.equal((await fetch(`${base}/api/ai`)).status, 200);
+  });
 });

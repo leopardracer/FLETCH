@@ -1,6 +1,24 @@
-# AI layer
+# FLETCH AI
 
-`src/ai/client.ts` (client) + `src/ai/rephrase.ts` (natural-language summaries) + `src/ai/chatAgent.ts` (chat agent) + `GET /api/tokens/:address?summary=ai` + `POST /api/chat`.
+`src/ai/client.ts` (client) + `src/ai/rephrase.ts` (the one rephrase pattern, cached) + `src/ai/brief.ts` (market brief) + `src/ai/walletExplain.ts` (wallet read) + `src/ai/chatAgent.ts` (chat agent) — surfaced as:
+
+| Surface | Endpoint | Where it shows |
+|---|---|---|
+| **Market brief** — what happened on Robinhood Chain in the last hour | `GET /api/brief` | top of the dashboard's Tokens and Overview pages |
+| **Token analyst** — why a token is moving, its risks | `GET /api/tokens/:address/ai-summary` (or `?summary=ai` on the report) | top of every token page |
+| **Wallet read** — PnL, win rate, entry timing in plain English | `GET /api/wallets/:address?summary=ai` | top of every wallet page |
+| **Ask FLETCH AI** — chat with five read-only tools | `POST /api/chat` (server key) or in-browser BYOK | the Ask FLETCH AI tab + the floating button on every page |
+| Status | `GET /api/ai` → `{ enabled, model }` | lets the dashboard pick server chat vs. BYOK |
+
+## One pattern, everywhere
+
+Every paragraph FLETCH AI writes goes through `rephraseFacts(facts, purpose)`: a deterministic builder turns data FLETCH already computed into plain fact strings, and **only those strings** reach the model, under a system prompt that forbids adding any number, name, cause or claim, predicting price, or telling anyone to buy/sell/hold. `purpose` (`token` / `market` / `wallet`) changes only the framing line — the rules are identical and a test asserts it.
+
+- **Market brief** (`buildMarketBriefFacts`) reads Radar, the persisted signal feed, and the monitoring count. Tokens are named by **shortened address only** — never by their on-chain symbol/name, which are deployer-controlled text. A public homepage paragraph must not be a channel for a deployer's prompt injection or marketing.
+- **Token analyst** rephrases the same `whyIsItMoving` the token page just loaded. The server keeps that object for 15 minutes per token so the card costs **no second chain read**; the endpoint returns 404 rather than invent anything if the report wasn't loaded.
+- **Wallet read** (`buildWalletFacts`) states every REAL metric with its value and every UNAVAILABLE / NOT_YET_IMPLEMENTED one with FLETCH's own reason — never dropped silently.
+- **Provenance is always shown.** Every card says whether it was written by the model or is FLETCH's facts shown as-is (no key / call failed), and has a "What it was given" disclosure listing the exact facts sent.
+- **Cost bounds.** `rephraseFacts` caches LLM results for 10 minutes keyed by purpose + exact facts (any real data change is a miss; failures aren't cached). `/api/brief` recomputes at most every 2 minutes. `POST /api/chat` — the one endpoint that can't be cached — has its own per-IP limit (`CHAT_RATE_LIMIT_MAX` per `CHAT_RATE_LIMIT_WINDOW_MS`, default 20 per 15 min) on top of the general `/api/*` limiter.
 
 Entirely optional. Unset `ANTHROPIC_API_KEY` and every AI feature degrades cleanly instead of throwing — see "Off by default" below.
 
@@ -51,13 +69,17 @@ Reachable via `GET /api/tokens/:address?summary=ai`. Opt-in and omitted by defau
 
 ### Tools
 
-Three tools, each a thin wrapper around a function the rest of FLETCH already uses — no tool computes anything new:
+Five tools, each a thin wrapper around a function the rest of FLETCH already uses — no tool computes anything new:
 
 | Tool | Backed by | Same code path as |
 |---|---|---|
 | `get_token_report` | `getTokenIntel()` (`src/intel/tokenIntel.ts`) | `GET /api/tokens/:address` |
 | `get_wallet_report` | `getWalletIntelligence()` | `GET /api/wallets/:address` |
 | `get_radar` | `getRadar()` | `GET /api/radar` |
+| `get_recent_signals` | `getRecentSignals()` | `GET /api/signals` |
+| `get_monitoring_status` | `getMonitoringHealth()` + RPC backoff state | `GET /api/monitoring` + `GET /api/health` |
+
+`get_radar` now fences each entry's symbol/name exactly like `get_token_report` does — before this pass the server-side radar tool passed them to the model unmarked (the browser copy already fenced them). A regression test covers it.
 
 `get_token_report` and `GET /api/tokens/:address` call the literal same function — `src/intel/tokenIntel.ts` was extracted from the route handler specifically so the HTTP API and the chat agent can't drift into reporting different numbers for the same token. An invalid address is rejected by the tool executor itself (regex check) before it ever reaches a chain read.
 
@@ -93,7 +115,7 @@ Up to `maxTurns` (default 4) round-trips: send the conversation, execute any `to
 
 ## BYOK: chatting from the dashboard with your own key
 
-`web/chatAgent.js` + the **Chat** tab in `web/app.js`/`index.html`. A third way to reach the chat agent, alongside `POST /api/chat` (server-side, needs the operator's `ANTHROPIC_API_KEY`) — this one needs no server-side key at all.
+`web/chatAgent.js` + the **Ask FLETCH AI** tab in `web/app.js`/`index.html`. When the server has its own key (`GET /api/ai` → `enabled: true`) the tab uses `POST /api/chat` and visitors need nothing; BYOK stays available as an option and is the only mode when the server has no key. A third way to reach the chat agent, alongside `POST /api/chat` (server-side, needs the operator's `ANTHROPIC_API_KEY`) — this one needs no server-side key at all.
 
 The visitor pastes their own Anthropic key into the Chat tab. From that point on, the Anthropic call happens **directly from their browser tab** to `api.anthropic.com`, using the `anthropic-dangerous-direct-browser-access` header Anthropic documents for exactly this pattern. FLETCH's server never receives that key — it isn't sent to any `fletch.*`/`/api/*` endpoint, only to Anthropic's own domain. The key is kept in that tab's `sessionStorage` only: gone on tab close, never written anywhere durable, never round-tripped through FLETCH at all.
 
@@ -109,7 +131,10 @@ The visitor pastes their own Anthropic key into the Chat tab. From that point on
 
 - **Streaming.** `POST /api/chat` returns the full reply in one response; no SSE/streaming endpoint yet.
 - **Conversation persistence.** Each request carries its own full `messages` history from the caller — nothing is stored server-side between requests.
-- **Rate limiting specific to chat.** `/api/chat` sits under the same `/api/*` limiter as everything else (`RATE_LIMIT_WINDOW_MS`/`RATE_LIMIT_MAX`), not a separate, tool-use-aware budget — a single chat conversation with several tool-calling turns counts as several requests against that shared limit.
-- **Tools beyond the three above** (e.g. `get_signals`, `get_snapshot_history`) — straightforward to add following the same pattern (wrap an existing real function, validate input, never compute anything new) if a real use case needs them.
-- **A shared module between `src/ai/chatAgent.ts` and `web/chatAgent.js`.** Noted above under BYOK: the two copies of `SYSTEM_PROMPT`/fencing are kept in sync by hand. A build step that generated the browser copy from the server one (or vice versa) would remove that drift risk; not built here since `web/` has no build step at all today.
+- **Tools beyond the five above** (e.g. `get_snapshot_history`) — straightforward to add following the same pattern (wrap an existing real function, validate input, never compute anything new).
+- **A shared module between `src/ai/chatAgent.ts` and `web/chatAgent.js`.** The two copies are still separate files (`web/` has no build step), but drift is now caught: a PARITY test in `chatAgent.test.ts` fails if the browser copy's system prompt or tool set differs from the server's.
 - **BYOK rate limiting.** The Chat tab's calls to FLETCH's own `/api/tokens|wallets|radar` endpoints sit under the normal `/api/*` limiter same as any dashboard page view — reasonable for one visitor clicking around, not evaluated for many BYOK chat sessions running concurrently.
+
+## Dashboard escaping
+
+Token symbols/names are deployer-controlled, and AI text is model output. The dashboard now HTML-escapes both everywhere it renders them (`esc()` in `web/app.js`) — every symbol, signal explanation/evidence, AI paragraph, and chat bubble. Before this pass a token named with HTML would have been rendered as markup on the dashboard.

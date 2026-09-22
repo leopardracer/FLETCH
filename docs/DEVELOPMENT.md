@@ -43,6 +43,9 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | `GET /api/tokens/:address/signals` | signal timeline for that token |
 | `GET /api/tokens/:address/wallets` | wallet activity for that token (per-token scope) |
 | `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized/unrealized PnL, win rate and early-entry timing from price-at-trade; average holding period still NOT_YET_IMPLEMENTED |
+| `GET /api/brief` | FLETCH AI market brief — last hour across Robinhood Chain, from Radar + signals (cached 2 min) |
+| `GET /api/tokens/:address/ai-summary` | FLETCH AI analyst paragraph for a token whose report was just loaded (no second chain read) |
+| `GET /api/ai` | whether server-side AI is configured: `{ enabled, model }` |
 
 ## Environment variables
 
@@ -141,7 +144,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-86.37% line coverage / 87.43% branch / 70.81% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+87.24% line coverage / 87.05% branch / 73.31% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|

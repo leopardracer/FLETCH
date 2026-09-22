@@ -10,7 +10,8 @@
  * it isn't sent to fletch's /api/* at all, only to api.anthropic.com.
  *
  * Real tool data still comes from FLETCH's own same-origin endpoints
- * (GET /api/tokens/:address, /api/wallets/:address, /api/radar) — the
+ * (GET /api/tokens/:address, /api/wallets/:address, /api/radar,
+ * /api/signals, /api/monitoring) — the
  * server-side deterministic engine, chain RPC access, and persistence
  * stay exactly as they are. Only the "who pays for the LLM call, and
  * who holds the key" boundary moves to the visitor.
@@ -27,13 +28,14 @@ const MAX_TURNS = 4;
 const MAX_UNTRUSTED_FIELD_LEN = 120;
 
 const SYSTEM_PROMPT = `
-You are FLETCH's on-chain assistant for Robinhood Chain. You help people understand tokens and wallets using ONLY the data returned by your tools in this conversation — never your own knowledge, memory, or a guess about any specific token, wallet, or price.
+You are FLETCH AI, the on-chain analyst for Robinhood Chain. You help people understand tokens, wallets, and what's happening across the chain using ONLY the data returned by your tools in this conversation — never your own knowledge, memory, or a guess about any specific token, wallet, or price.
 
 Rules, no exceptions:
 - Never state a number, date, risk level, or fact about a specific token or wallet unless it came from a tool_result in this conversation.
 - Never predict future price or performance, and never call anything "safe to buy" — FLETCH reports what has already happened on-chain, not forecasts.
 - If a tool_result marks a field UNAVAILABLE or NOT_YET_IMPLEMENTED, say plainly that FLETCH doesn't have that data yet — never fill the gap with a guess.
 - If the person hasn't given a valid contract or wallet address, ask for one rather than guessing which token they mean.
+- For questions about the chain as a whole ("what's moving?", "any whales?", "is FLETCH watching?"), use get_recent_signals, get_radar, or get_monitoring_status — no address needed.
 - Attribute findings to FLETCH ("FLETCH flagged...", "FLETCH's signal engine detected...") and keep answers concise.
 - General conversation (greetings, explaining what FLETCH is, what a term means) doesn't need a tool call.
 
@@ -74,6 +76,24 @@ const TOOLS = [
         limit: { type: "number", description: "Max entries to return, capped at 25." },
       },
     },
+  },
+  {
+    name: "get_recent_signals",
+    description:
+      "FLETCH's chain-wide live signal feed — the most important recent on-chain events across every monitored token " +
+      "(whale buys/sells, liquidity pulls, holder growth, risk flags...), sorted by severity then recency. Use this for " +
+      "questions like 'what's happening right now', 'any whales?', 'any rugs?'.",
+    input_schema: {
+      type: "object",
+      properties: { limit: { type: "number", description: "Max signals to return, capped at 50. Defaults to 20." } },
+    },
+  },
+  {
+    name: "get_monitoring_status",
+    description:
+      "Whether FLETCH is actively watching Robinhood Chain right now: how many tokens are monitored, active/failed counts, " +
+      "last successful check, signals in the last hour, and whether chain reads are paused by an RPC rate limit.",
+    input_schema: { type: "object", properties: {} },
   },
 ];
 
@@ -129,6 +149,18 @@ async function executeTool(name, input) {
         const { ok, body } = await getFletchJSON(`/api/radar${qs}`);
         if (!ok) return { error: (body && body.error) || "Couldn't load the radar." };
         return fenceRadarEntries((body && body.radar) || []);
+      }
+      case "get_recent_signals": {
+        const limit = typeof input.limit === "number" ? Math.max(1, Math.min(50, input.limit)) : 20;
+        const { ok, body } = await getFletchJSON(`/api/signals?limit=${limit}`);
+        if (!ok) return { error: (body && body.error) || "Couldn't load the signal feed." };
+        // /api/signals adds each token's on-chain symbol — deployer-controlled, so fenced.
+        return ((body && body.signals) || []).map((sg) => ({ ...sg, symbol: fenceUntrustedText(sg.symbol) }));
+      }
+      case "get_monitoring_status": {
+        const [{ ok, body }, health] = await Promise.all([getFletchJSON("/api/monitoring"), getFletchJSON("/api/health")]);
+        if (!ok) return { error: (body && body.error) || "Couldn't load monitoring status." };
+        return { ...body, rpcBackoff: health.body && health.body.rpcBackoff };
       }
       default:
         return { error: `Unknown tool: ${name}` };

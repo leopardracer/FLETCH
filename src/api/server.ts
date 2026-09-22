@@ -24,7 +24,10 @@ import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
 import { rpcBackoff, type RpcBackoffState } from "../core/rpcBackoff.js";
-import { rephraseSummary } from "../ai/rephrase.js";
+import { rephraseSummary, rephraseFacts } from "../ai/rephrase.js";
+import { buildMarketBrief, type MarketBrief } from "../ai/brief.js";
+import { buildWalletFacts } from "../ai/walletExplain.js";
+import type { WhyIsItMoving } from "../ai/explain.js";
 import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
 
 const provider = new RpcChainDataProvider();
@@ -83,7 +86,15 @@ function asyncRoute(
   };
 }
 
-export function createServer(options?: { rateLimit?: { windowMs: number; limit: number } }) {
+/** How long a computed market brief is reused before the radar/signal feed is re-read. */
+const BRIEF_CACHE_SECONDS = 120;
+/** How long a token page's deterministic "why is it moving" stays available to /ai-summary. */
+const WHY_CACHE_SECONDS = 900;
+
+export function createServer(options?: {
+  rateLimit?: { windowMs: number; limit: number };
+  chatRateLimit?: { windowMs: number; limit: number };
+}) {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -106,6 +117,21 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
       message: { error: "Too many requests — slow down." },
     })
   );
+
+  // Stricter cap on the one endpoint that can spend the server's own LLM key
+  // per request (the brief and summaries are cached; chat can't be).
+  const crl = options?.chatRateLimit ?? { windowMs: config.chatRateLimitWindowMs, limit: config.chatRateLimitMax };
+  const chatLimiter = rateLimit({
+    windowMs: crl.windowMs,
+    limit: crl.limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many AI chat messages — try again in a few minutes." },
+  });
+
+  // Per-instance caches (never module-global, so tests stay isolated).
+  let briefCache: { at: number; brief: MarketBrief } | null = null;
+  const whyCache = new Map<string, { at: number; why: WhyIsItMoving }>();
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const webDir = path.resolve(__dirname, "../../web");
@@ -232,12 +258,29 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
 
     const intel = await getTokenIntel(address, info, provider);
     const body: Record<string, unknown> = bigIntSafe(intel) as unknown as Record<string, unknown>;
+    // Kept briefly so the dashboard's AI analyst card (GET .../ai-summary)
+    // can rephrase exactly these facts without a second round of chain reads.
+    if (whyCache.size > 1000) whyCache.clear();
+    whyCache.set(address.toLowerCase(), { at: Math.floor(Date.now() / 1000), why: intel.whyIsItMoving });
 
     if (req.query.summary === "ai") {
       body.naturalLanguageSummary = await rephraseSummary(intel.whyIsItMoving);
     }
 
     res.json(body);
+  }));
+
+  // AI analyst card for a token page: rephrases the SAME deterministic
+  // whyIsItMoving the page just loaded — no second chain read, no new facts.
+  // Needs the token to have been opened recently (GET /api/tokens/:address).
+  app.get("/api/tokens/:address/ai-summary", asyncRoute(async (req, res) => {
+    const now = Math.floor(Date.now() / 1000);
+    const cached = whyCache.get(req.params.address.toLowerCase());
+    if (!cached || now - cached.at > WHY_CACHE_SECONDS) {
+      res.status(404).json({ error: "No fresh FLETCH report for this token — load GET /api/tokens/:address first." });
+      return;
+    }
+    res.json({ aiEnabled: config.hasAnthropic(), naturalLanguageSummary: await rephraseSummary(cached.why) });
   }));
 
   // Snapshot history — "how has this token's score evolved?"
@@ -266,14 +309,48 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
   // real (participation record) vs. NOT_YET_IMPLEMENTED (PnL, win rate).
   app.get("/api/wallets/:address", asyncRoute(async (req, res) => {
     const address = req.params.address as `0x${string}`;
-    res.json(getWalletIntelligence(address));
+    const intel = getWalletIntelligence(address);
+    if (req.query.summary === "ai") {
+      const facts = buildWalletFacts(intel);
+      res.json({ ...intel, aiFacts: facts, naturalLanguageSummary: await rephraseFacts(facts, "wallet") });
+      return;
+    }
+    res.json(intel);
+  }));
+
+  // Is the server-side AI (chat, brief, summaries) configured? Lets the
+  // dashboard use server chat when it is, and offer BYOK when it isn't.
+  // Never reveals the key or the model config beyond the model name.
+  app.get("/api/ai", (_req, res) => {
+    res.json({ enabled: config.hasAnthropic(), model: config.hasAnthropic() ? config.anthropicModel : null });
+  });
+
+  // FLETCH AI Market Brief — one paragraph on what's happening across
+  // Robinhood Chain right now, rephrased from Radar + the signal feed +
+  // monitoring counts (src/ai/brief.ts). Cached briefly: a busy homepage
+  // re-reads the feed at most every BRIEF_CACHE_SECONDS.
+  app.get("/api/brief", asyncRoute(async (_req, res) => {
+    const now = Math.floor(Date.now() / 1000);
+    if (!briefCache || now - briefCache.at > BRIEF_CACHE_SECONDS) {
+      const windowSeconds = 3600;
+      const [radar, signals] = await Promise.all([getRadar(windowSeconds).catch(() => []), Promise.resolve(getRecentSignals(200))]);
+      const brief = await buildMarketBrief({
+        radar,
+        signals,
+        monitoredTokens: getMonitoringHealth(now).totalMonitored,
+        windowSeconds,
+        now,
+      });
+      briefCache = { at: now, brief };
+    }
+    res.json({ aiEnabled: config.hasAnthropic(), ...briefCache.brief });
   }));
 
   // Chat agent — answers questions about tokens/wallets by calling the
   // same real deterministic functions the rest of the API uses
   // (src/ai/chatAgent.ts). Returns a plain "not configured" reply if
   // ANTHROPIC_API_KEY is unset, same as every other AI feature here.
-  app.post("/api/chat", asyncRoute(async (req, res) => {
+  app.post("/api/chat", chatLimiter, asyncRoute(async (req, res) => {
     const parsed = chatRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({

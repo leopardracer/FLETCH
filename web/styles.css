@@ -621,6 +621,89 @@ button#chat-send:disabled {
   font-family: var(--sans);
 }
 
+/* ---------- FLETCH AI ---------- */
+.ai-card {
+  position: relative;
+  margin: 0 0 18px;
+  padding: 16px 18px 14px 20px;
+  background: linear-gradient(180deg, rgba(217,49,106,0.10), rgba(217,49,106,0.03));
+  border: 1px solid rgba(252,83,134,0.28);
+  border-left: 3px solid var(--pink-bright);
+  border-radius: 6px;
+}
+.ai-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--pink-bright);
+  margin-bottom: 8px;
+}
+.ai-mark { width: 18px; height: 18px; image-rendering: pixelated; }
+.ai-live .ai-head::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.ai-text { margin: 0 0 10px; font-size: 15px; line-height: 1.6; color: var(--ink); max-width: 72ch; }
+.ai-prov { font-size: 11.5px; color: var(--ink-faint); }
+.ai-facts { margin-top: 8px; font-size: 12px; color: var(--ink-dim); }
+.ai-facts summary { cursor: pointer; color: var(--ink-faint); }
+.ai-facts summary:hover { color: var(--ink-dim); }
+.ai-facts ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.55; }
+.pos { color: var(--green); font-weight: 600; }
+.neg { color: var(--red); font-weight: 600; }
+
+.chat-panel { border-color: rgba(252,83,134,0.28); }
+.chat-empty p { max-width: 56ch; margin: 0 auto 14px; line-height: 1.55; }
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chat-suggestion {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.chat-suggestion:hover,
+.chat-suggestion:focus-visible { border-color: var(--pink-bright); color: #fff; outline: none; }
+.chat-byok summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--ink-dim); }
+.chat-byok[open] summary { margin-bottom: 10px; }
+
+.ask-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #fff;
+  background: var(--pink);
+  border: 1px solid var(--pink-bright);
+  border-radius: 999px;
+  padding: 10px 16px 10px 12px;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+}
+.ask-fab img { width: 20px; height: 20px; image-rendering: pixelated; }
+.ask-fab:hover,
+.ask-fab:focus-visible { background: var(--pink-bright); outline: none; }
+.ask-fab[hidden] { display: none; }
+@media (max-width: 640px) {
+  .ask-fab { right: 14px; bottom: 14px; padding: 9px 12px 9px 10px; }
+  .ai-text { font-size: 14px; }
+}
+
 /* ============================================================
    Responsive — tablet and mobile. Additive only: nothing above
    this block changes for desktop. Tables scroll horizontally

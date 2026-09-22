@@ -8,7 +8,7 @@ const NAV = [
   { id: "tokens", label: "Tokens" },
   { id: "wallets", label: "Wallets" },
   { id: "risk", label: "Risk" },
-  { id: "chat", label: "Chat" },
+  { id: "chat", label: "Ask FLETCH AI" },
   { id: "monitoring", label: "Monitoring" },
   { id: "docs", label: "Docs" },
 ];
@@ -42,6 +42,16 @@ async function getJSON(path) {
   return body;
 }
 
+/**
+ * HTML-escapes any text that isn't FLETCH's own markup. A token's symbol and
+ * name are set by whoever deployed it — anyone can name a token
+ * `<img src=x onerror=...>` — and AI text is model output. Neither may ever
+ * reach innerHTML unescaped.
+ */
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
 function fmtAddr(a) {
   if (!a) return "—";
   return a.slice(0, 6) + "…" + a.slice(-4);
@@ -62,7 +72,7 @@ function severityChip(level) {
  *  rather than showing an empty placeholder in every row. */
 function whyLine(topSignal) {
   if (!topSignal) return "";
-  return `<div class="why-line"><span class="why-dot sev-${topSignal.severity}"></span>${topSignal.explanation}</div>`;
+  return `<div class="why-line"><span class="why-dot sev-${topSignal.severity}"></span>${esc(topSignal.explanation)}</div>`;
 }
 
 function availabilityBadge(state) {
@@ -85,6 +95,48 @@ function availabilityBadge(state) {
  */
 function stateBlock(kind, title, body) {
   return `<div class="state-block state-${kind}"><div class="state-title">${title}</div>${body ? `<div class="state-body">${body}</div>` : ""}</div>`;
+}
+
+/**
+ * FLETCH AI card — one consistent look for every AI-written paragraph.
+ * Always says where the text came from: the model rephrasing FLETCH's own
+ * computed facts, or (no key / call failed) those facts shown as-is.
+ */
+function aiCard(title, summary, opts = {}) {
+  const isLLM = summary && summary.source === "LLM";
+  const provenance = isLLM
+    ? "Written by FLETCH AI from FLETCH's own on-chain findings. No outside data, no predictions, no advice."
+    : "FLETCH's own findings, shown as-is. AI rephrasing isn't configured on this instance.";
+  const facts =
+    opts.facts && opts.facts.length
+      ? `<details class="ai-facts"><summary>What it was given</summary><ul>${opts.facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></details>`
+      : "";
+  return `
+    <section class="ai-card${isLLM ? " ai-live" : ""}">
+      <div class="ai-head"><img src="favicon.png" alt="" class="ai-mark" /><span>${esc(title)}</span></div>
+      <p class="ai-text">${esc(summary ? summary.text : "")}</p>
+      <div class="ai-prov">${provenance}</div>
+      ${facts}
+    </section>`;
+}
+
+function aiCardLoading(title) {
+  return `<section class="ai-card"><div class="ai-head"><img src="favicon.png" alt="" class="ai-mark" /><span>${esc(title)}</span></div>${loadingLine("reading the chain")}</section>`;
+}
+
+/** Loads the Market Brief into `slotId` — never blocks the page it sits on. */
+async function loadMarketBrief(slotId) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  slot.innerHTML = aiCardLoading("FLETCH AI market brief");
+  try {
+    const b = await getJSON("/api/brief");
+    const el = document.getElementById(slotId);
+    if (el) el.innerHTML = aiCard("FLETCH AI market brief, last hour", b.summary, { facts: b.facts });
+  } catch {
+    const el = document.getElementById(slotId);
+    if (el) el.innerHTML = "";
+  }
 }
 
 /** A small terminal-style loading indicator — a blinking cursor, not a spinner or skeleton. */
@@ -112,9 +164,9 @@ async function renderLiveSignals() {
         (s) => `
         <div class="signal-row" onclick="location.hash='#/token/${s.token}'">
           <div class="signal-time">${fmtTime(s.timestamp)}</div>
-          <div class="signal-token">${s.symbol ? "$" + s.symbol : fmtAddr(s.token)}</div>
+          <div class="signal-token">${s.symbol ? "$" + esc(s.symbol) : fmtAddr(s.token)}</div>
           <div class="signal-type">${severityChip(s.severity)} <span class="signal-type-label">${s.type.replace(/_/g, " ")}</span></div>
-          <div class="signal-evidence">${s.evidence}</div>
+          <div class="signal-evidence">${esc(s.evidence)}</div>
         </div>`
       )
       .join("")}</div>`;
@@ -188,7 +240,7 @@ function radarCard(e, rank) {
       <div class="radar-rank">${String(rank).padStart(2, "0")}</div>
       <div class="radar-body">
         <div class="radar-head">
-          <span class="radar-sym">${e.symbol ? "$" + e.symbol : fmtAddr(e.token)}</span>
+          <span class="radar-sym">${e.symbol ? "$" + esc(e.symbol) : fmtAddr(e.token)}</span>
           <span class="radar-score-badge"><span class="radar-score-label">RADAR</span><span class="radar-score-num">${e.radarScore}</span></span>
         </div>
 
@@ -219,11 +271,13 @@ async function renderOverview() {
     <div class="section-head">
       <div><h1>Overview</h1><p>Everything below comes from the same live feed as Tokens and Signals — filtered differently.</p></div>
     </div>
+    <div id="brief-slot"></div>
     <div class="overview-grid" id="overview-body">
       <div class="panel-block"><h2>Moving now</h2>${loadingLine()}</div>
       <div class="panel-block"><h2>Risk alerts</h2>${loadingLine()}</div>
     </div>
   `;
+  loadMarketBrief("brief-slot");
   try {
     const [data, signalsData] = await Promise.all([
       getJSON("/api/tokens"),
@@ -242,7 +296,7 @@ async function renderOverview() {
             ? movingNow
                 .map(
                   (t) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/token/${t.token}'">
-                    <span class="sym">${t.symbol ? "$" + t.symbol : fmtAddr(t.token)}</span>
+                    <span class="sym">${t.symbol ? "$" + esc(t.symbol) : fmtAddr(t.token)}</span>
                     <span>${scoreBadge(t.fletchScore)}</span>
                   </div>`
                 )
@@ -257,7 +311,7 @@ async function renderOverview() {
             ? alerts
                 .map(
                   (t) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/token/${t.token}'">
-                    <span class="sym">${t.symbol ? "$" + t.symbol : fmtAddr(t.token)}</span>
+                    <span class="sym">${t.symbol ? "$" + esc(t.symbol) : fmtAddr(t.token)}</span>
                     <span>${severityChip(t.riskLevel)}</span>
                   </div>`
                 )
@@ -272,7 +326,7 @@ async function renderOverview() {
             ? recentSignals
                 .map(
                   (sg) => `<div class="mini-row why" style="cursor:pointer" onclick="location.hash='#/token/${sg.token}'">
-                    <span class="why-line" style="margin:0"><span class="why-dot sev-${sg.severity}"></span><b>${sg.symbol ? "$" + sg.symbol : fmtAddr(sg.token)}</b> — ${sg.explanation}</span>
+                    <span class="why-line" style="margin:0"><span class="why-dot sev-${sg.severity}"></span><b>${sg.symbol ? "$" + esc(sg.symbol) : fmtAddr(sg.token)}</b> — ${esc(sg.explanation)}</span>
                   </div>`
                 )
                 .join("")
@@ -321,7 +375,7 @@ async function renderWalletsView() {
       .map(
         (p) => `
         <div class="panel-block">
-          <h2>${p.token.symbol ? "$" + p.token.symbol : fmtAddr(p.token.token)}</h2>
+          <h2>${p.token.symbol ? "$" + esc(p.token.symbol) : fmtAddr(p.token.token)}</h2>
           <table class="feed">
             <thead><tr><th>Wallet</th><th>Net accumulation</th><th>Scope</th></tr></thead>
             <tbody>
@@ -368,7 +422,7 @@ async function renderRiskView() {
           ${tokens
             .map(
               (t) => `<tr onclick="location.hash='#/token/${t.token}'">
-                <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
+                <td><span class="sym">${t.symbol ? "$" + esc(t.symbol) : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
                 <td class="addr">${fmtAddr(t.deployer)}</td>
                 <td>${severityChip(t.riskLevel)}</td>
                 <td>${scoreBadge(t.fletchScore)}</td>
@@ -479,8 +533,10 @@ async function renderFeed() {
         <p>New Pons V2 launches on Robinhood Chain, ranked by FLETCH Score — not market cap. For the live event stream, see the Signals tab.</p>
       </div>
     </div>
+    <div id="brief-slot"></div>
     <div id="feed-body">${loadingLine()}</div>
   `;
+  loadMarketBrief("brief-slot");
   const body = document.getElementById("feed-body");
   try {
     const data = await getJSON("/api/tokens");
@@ -492,7 +548,7 @@ async function renderFeed() {
       .map(
         (t) => `
       <tr onclick="location.hash='#/token/${t.token}'">
-        <td><span class="sym">${t.symbol ? "$" + t.symbol : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
+        <td><span class="sym">${t.symbol ? "$" + esc(t.symbol) : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
         <td class="addr">${fmtAddr(t.deployer)}</td>
         <td>${t.devBuyPercent !== null ? t.devBuyPercent.toFixed(1) + "%" : "—"}</td>
         <td>${severityChip(t.riskLevel)}</td>
@@ -528,6 +584,18 @@ function componentBlock(name, comp) {
   </div>`;
 }
 
+/** Fills the token page's AI analyst card from the report the page just loaded (no second chain read). */
+async function loadTokenAiSummary(address, facts) {
+  try {
+    const r = await getJSON(`/api/tokens/${address}/ai-summary`);
+    const el = document.getElementById("token-ai-slot");
+    if (el) el.innerHTML = aiCard("FLETCH AI analyst", r.naturalLanguageSummary, { facts });
+  } catch {
+    const el = document.getElementById("token-ai-slot");
+    if (el) el.innerHTML = "";
+  }
+}
+
 async function renderToken(address) {
   renderNav(null);
   app.innerHTML = `<a class="back" onclick="location.hash='#/'">&larr; back to feed</a>${loadingLine(fmtAddr(address))}`;
@@ -549,7 +617,7 @@ async function renderToken(address) {
       <a class="back" onclick="location.hash='#/'">&larr; back to feed</a>
       <div class="detail-head">
         <div>
-          <h1>${d.token.symbol ? "$" + d.token.symbol : "Unresolved token"}</h1>
+          <h1>${d.token.symbol ? "$" + esc(d.token.symbol) : "Unresolved token"}</h1>
           <div class="addr">${d.token.address}</div>
         </div>
         <div class="score-big">
@@ -557,6 +625,8 @@ async function renderToken(address) {
           <div class="label">${s.overall !== null ? "FLETCH Score" : (s.overallUnavailableReason || "score unavailable")}</div>
         </div>
       </div>
+
+      <div id="token-ai-slot">${aiCardLoading("FLETCH AI analyst")}</div>
 
       <div class="grid">
         <div class="card">
@@ -599,12 +669,12 @@ async function renderToken(address) {
 
       <div class="panel-block">
         <h2>Why is it moving?</h2>
-        <ul>${d.whyIsItMoving.bullets.map((b) => `<li>${b}</li>`).join("") || "<li>Not enough data yet.</li>"}</ul>
+        <ul>${d.whyIsItMoving.bullets.map((b) => `<li>${esc(b)}</li>`).join("") || "<li>Not enough data yet.</li>"}</ul>
       </div>
 
       <div class="panel-block">
         <h2>Risk — ${d.risk.level}</h2>
-        <ul>${d.whyIsItMoving.risks.map((r) => `<li>${r}</li>`).join("")}</ul>
+        <ul>${d.whyIsItMoving.risks.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
       </div>
 
       <div class="panel-block">
@@ -616,7 +686,7 @@ async function renderToken(address) {
                   (sig) => `<div class="signal-row" style="cursor:default">
                     <div class="signal-time">${fmtTime(sig.timestamp)}</div>
                     <div class="signal-type">${severityChip(sig.severity)} <span class="signal-type-label">${sig.type.replace(/_/g, " ")}</span></div>
-                    <div class="signal-evidence">${sig.evidence}</div>
+                    <div class="signal-evidence">${esc(sig.evidence)}</div>
                   </div>`
                 )
                 .join("")}</div>`
@@ -679,6 +749,7 @@ async function renderToken(address) {
         }
       </div>
     `;
+    loadTokenAiSummary(address, [...d.whyIsItMoving.bullets, ...d.whyIsItMoving.risks]);
   } catch (e) {
     const notFound = e.status === 404;
     app.innerHTML = `
@@ -689,14 +760,34 @@ async function renderToken(address) {
 
 const CHAT_KEY_STORAGE = "fletch_byok_anthropic_key";
 let chatMessages = []; // kept at module scope so it survives navigating away and back within this tab
+let serverAi = null; // { enabled, model } from GET /api/ai — fetched once
+
+async function getServerAi() {
+  if (serverAi) return serverAi;
+  try {
+    serverAi = await getJSON("/api/ai");
+  } catch {
+    serverAi = { enabled: false, model: null };
+  }
+  return serverAi;
+}
+
+const CHAT_SUGGESTIONS = [
+  "What's moving on Robinhood Chain right now?",
+  "Any whale buys in the last hour?",
+  "Any liquidity pulls or other red flags?",
+  "Is FLETCH watching the chain right now?",
+];
 
 function chatBubble(role, text) {
-  return `<div class="chat-msg chat-${role}"><div class="chat-bubble">${text}</div></div>`;
+  // Escaped (line breaks are kept by .chat-bubble's pre-wrap): the reply is
+  // model text and may quote deployer-controlled token names — never trusted as HTML.
+  return `<div class="chat-msg chat-${role}"><div class="chat-bubble">${esc(text)}</div></div>`;
 }
 
 function chatToolCallsLine(toolCalls) {
   if (!toolCalls || toolCalls.length === 0) return "";
-  const names = toolCalls.map((t) => t.name).join(", ");
+  const names = toolCalls.map((t) => esc(t.name)).join(", ");
   return `<div class="chat-toolcalls">FLETCH looked up: ${names}</div>`;
 }
 
@@ -704,7 +795,16 @@ function renderChatLog() {
   const log = document.getElementById("chat-log");
   if (!log) return;
   if (chatMessages.length === 0) {
-    log.innerHTML = `<div class="chat-empty">Ask about a token or wallet address on Robinhood Chain.</div>`;
+    log.innerHTML = `<div class="chat-empty">
+      <p>Ask FLETCH AI about Robinhood Chain: a token or wallet address, or what's happening right now. Every answer comes from FLETCH's own on-chain data; it never predicts prices or tells you what to buy.</p>
+      <div class="chat-suggestions">${CHAT_SUGGESTIONS.map((q, i) => `<button class="chat-suggestion" data-i="${i}">${esc(q)}</button>`).join("")}</div>
+    </div>`;
+    log.querySelectorAll(".chat-suggestion").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        document.getElementById("chat-input").value = CHAT_SUGGESTIONS[Number(btn.dataset.i)];
+        sendChatMessage();
+      })
+    );
     return;
   }
   log.innerHTML = chatMessages
@@ -718,24 +818,52 @@ function renderChatLog() {
   log.scrollTop = log.scrollHeight;
 }
 
+/** Last ≤20 non-empty turns, starting on a user turn — the shape POST /api/chat accepts. */
+function trimForServer(messages) {
+  const clean = messages.filter((m) => typeof m.content === "string" && m.content.trim()).slice(-20);
+  while (clean.length && clean[0].role !== "user") clean.shift();
+  return clean;
+}
+
+/** Server mode: FLETCH's own key, same tools, same rules (POST /api/chat). */
+async function runServerChat(messages) {
+  const res = await fetch(API_BASE + "/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: trimForServer(messages) }),
+  });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    // fall through
+  }
+  if (!res.ok) return { reply: (body && body.error) || `FLETCH AI is unavailable right now (HTTP ${res.status}).`, toolCalls: [] };
+  return body;
+}
+
 async function sendChatMessage() {
   const input = document.getElementById("chat-input");
   const sendBtn = document.getElementById("chat-send");
   const text = input.value.trim();
   if (!text) return;
+  const ai = await getServerAi();
   const apiKey = sessionStorage.getItem(CHAT_KEY_STORAGE) || "";
 
-  chatMessages.push({ role: "user", content: text });
+  chatMessages.push({ role: "user", content: text.slice(0, 4000) });
   input.value = "";
   renderChatLog();
 
   const log = document.getElementById("chat-log");
-  log.insertAdjacentHTML("beforeend", `<div class="chat-msg chat-assistant" id="chat-pending">${loadingLine("thinking")}</div>`);
+  log.insertAdjacentHTML("beforeend", `<div class="chat-msg chat-assistant" id="chat-pending">${loadingLine("FLETCH AI is reading the chain")}</div>`);
   log.scrollTop = log.scrollHeight;
   sendBtn.disabled = true;
 
   try {
-    const result = await window.FletchChatAgent.runBrowserChatAgent(chatMessages, apiKey);
+    // The visitor's own key wins if they saved one; otherwise the server's.
+    const result = apiKey || !ai.enabled
+      ? await window.FletchChatAgent.runBrowserChatAgent(chatMessages, apiKey)
+      : await runServerChat(chatMessages);
     chatMessages.push({ role: "assistant", content: result.reply });
     renderChatLog();
     if (result.toolCalls && result.toolCalls.length) {
@@ -762,16 +890,12 @@ function saveChatKey() {
   status.textContent = "Key saved for this browser tab only — cleared when you close it. Never sent to FLETCH's server.";
 }
 
-function renderChat() {
+async function renderChat() {
   renderNav("chat");
+  const ai = await getServerAi();
   const hasKey = !!sessionStorage.getItem(CHAT_KEY_STORAGE);
-  app.innerHTML = `
-    <div class="section-head">
-      <div><h1>Chat</h1><p>Ask about a token or wallet. This runs entirely in your browser with your own Anthropic API key — FLETCH's server never sees it and never stores anything typed here. See <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" target="_blank" rel="noopener">docs/AI.md</a>.</p></div>
-    </div>
-
-    <div class="panel-block">
-      <h2>Your Anthropic API key</h2>
+  const keyPanel = `
+      <h2>${ai.enabled ? "Use your own Anthropic key instead (optional)" : "Your Anthropic API key"}</h2>
       <p style="color:var(--ink-faint);font-size:12.5px;margin:0 0 10px">
         Calls go straight from this browser tab to api.anthropic.com. Your key is visible in this tab's network requests (devtools) — only paste a key you're fine placing in a browser session.
         Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
@@ -780,16 +904,25 @@ function renderChat() {
         <input type="password" id="chat-api-key" placeholder="${hasKey ? "•••• saved for this tab" : "sk-ant-..."}" autocomplete="off" spellcheck="false" />
         <button id="chat-key-save">Save for this tab</button>
       </div>
-      <div id="chat-key-status" class="chat-key-status">${hasKey ? "Key saved for this browser tab only — cleared when you close it. Never sent to FLETCH's server." : ""}</div>
+      <div id="chat-key-status" class="chat-key-status">${hasKey ? "Key saved for this browser tab only — cleared when you close it. Never sent to FLETCH's server." : ""}</div>`;
+  app.innerHTML = `
+    <div class="section-head">
+      <div><h1>Ask FLETCH AI</h1><p>${
+        ai.enabled
+          ? "Your on-chain analyst for Robinhood Chain. It answers only from what FLETCH itself reads off the chain, and says so plainly when it doesn't know."
+          : "Your on-chain analyst for Robinhood Chain. This instance has no server-side AI key, so chat runs in your browser with your own Anthropic key — FLETCH's server never sees it."
+      } See <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" target="_blank" rel="noopener">docs/AI.md</a>.</p></div>
     </div>
 
-    <div class="panel-block">
+    <div class="panel-block chat-panel">
       <div id="chat-log" class="chat-log"></div>
       <div class="chat-input-row">
-        <textarea id="chat-input" placeholder="Ask about a token or wallet address…" rows="2"></textarea>
-        <button id="chat-send">Send</button>
+        <textarea id="chat-input" placeholder="Paste a token or wallet address, or ask what's happening…" rows="2"></textarea>
+        <button id="chat-send">Ask</button>
       </div>
     </div>
+
+    ${ai.enabled ? `<details class="panel-block chat-byok">${keyPanel.replace("<h2>", "<summary>").replace("</h2>", "</summary>")}</details>` : `<div class="panel-block">${keyPanel}</div>`}
   `;
 
   renderChatLog();
@@ -803,21 +936,79 @@ function renderChat() {
   });
 }
 
+/** "Ask FLETCH AI" — reachable from every page, not only from the nav. */
+function renderAskFab(route) {
+  let fab = document.getElementById("ask-fab");
+  if (!fab) {
+    fab = document.createElement("button");
+    fab.id = "ask-fab";
+    fab.className = "ask-fab";
+    fab.innerHTML = `<img src="favicon.png" alt="" /><span>Ask FLETCH AI</span>`;
+    fab.addEventListener("click", () => (location.hash = "#/chat"));
+    document.body.appendChild(fab);
+  }
+  fab.hidden = route === "#/chat";
+}
+
+function fmtEth(v) {
+  if (typeof v !== "number") return "—";
+  const r = Number(v.toFixed(4));
+  return `${r > 0 ? "+" : ""}${r} ETH`;
+}
+
+function walletMetricValue(v) {
+  if (v.availability !== "REAL" || typeof v.value !== "number") return availabilityBadge(v.availability);
+  if (v.unit === "ETH") return `<span class="${v.value >= 0 ? "pos" : "neg"}">${fmtEth(v.value)}</span>`;
+  if (v.unit === "percent") return `${Number(v.value.toFixed(1))}%`;
+  return `${Number(v.value.toFixed(1))} <span style="color:var(--ink-faint)">${esc(v.unit || "")}</span>`;
+}
+
 async function renderWalletDetail(address) {
   renderNav(null);
   app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${loadingLine(fmtAddr(address))}`;
   try {
-    const w = await getJSON(`/api/wallets/${address}`);
+    // ?summary=ai costs no chain reads — wallet data is all persisted — so
+    // the AI read loads with the page instead of after it.
+    const w = await getJSON(`/api/wallets/${address}?summary=ai`);
     const metricRows = Object.entries(w.metrics)
-      .map(([k, v]) => `<div class="avail-row"><span>${k.replace(/([A-Z])/g, " $1").trim()}</span>${availabilityBadge(v.availability)}</div>`)
+      .map(
+        ([k, v]) => `<div class="avail-row" title="${esc(v.reason || "")}"><span>${k.replace(/([A-Z])/g, " $1").trim()}</span><span>${walletMetricValue(v)}</span></div>`
+      )
       .join("");
+    const positions = w.positions || [];
     app.innerHTML = `
       <a class="back" onclick="history.back()">&larr; back</a>
       <div class="detail-head">
         <div>
           <h1>Wallet</h1>
-          <div class="addr">${w.wallet}</div>
+          <div class="addr">${esc(w.wallet)}</div>
         </div>
+      </div>
+      ${aiCard("FLETCH AI wallet read", w.naturalLanguageSummary, { facts: w.aiFacts })}
+      <div class="panel-block">
+        <h2>Performance</h2>
+        <p style="color:var(--ink-faint);font-size:12.5px;margin-top:0">From every curve trade FLETCH recorded with its exact price, only over history it saw from each token's launch. Anything it can't back with real trades says so.</p>
+        <div class="avail-grid">${metricRows}</div>
+      </div>
+      <div class="panel-block">
+        <h2>Positions</h2>
+        ${
+          positions.length
+            ? `<table class="feed">
+                <thead><tr><th>Token</th><th>Status</th><th>Trades</th><th>Realized</th></tr></thead>
+                <tbody>${positions
+                  .map(
+                    (p) => `<tr onclick="location.hash='#/token/${esc(p.token)}'">
+                      <td class="addr">${fmtAddr(p.token)}</td>
+                      <td>${p.status === "UNKNOWN_COST_BASIS" ? `<span class="chip na" title="Sold tokens FLETCH never saw it buy">UNKNOWN COST</span>` : `<span class="chip ${p.status === "OPEN" ? "MEDIUM" : "LOW"}">${p.status}</span>`}</td>
+                      <td>${p.tradesCounted}</td>
+                      <td>${p.realizedPnlPair === null ? "—" : fmtEth(p.realizedPnlPair)}</td>
+                    </tr>`
+                  )
+                  .join("")}</tbody>
+              </table>`
+            : stateBlock("pending", "NO POSITIONS YET", "No curve trades recorded for this wallet inside a token's gap-free history from launch.")
+        }
       </div>
       <div class="panel-block">
         <h2>Recorded activity</h2>
@@ -830,19 +1021,15 @@ async function renderWalletDetail(address) {
             : stateBlock("pending", "NOT ENOUGH HISTORY YET", "No recorded activity for this wallet yet.")
         }
       </div>
-      <div class="panel-block">
-        <h2>Wallet intelligence metrics</h2>
-        <p style="color:var(--ink-faint);font-size:12.5px;margin-top:0">No fabricated "wallet score" — each metric below is either real or explicitly not yet implemented, with the exact missing data named.</p>
-        <div class="avail-grid">${metricRows}</div>
-      </div>
     `;
   } catch (e) {
-    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${stateBlock("error", "COULDN'T LOAD THIS WALLET", e.message)}`;
+    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${stateBlock("error", "COULDN'T LOAD THIS WALLET", esc(e.message))}`;
   }
 }
 
 function route() {
   const hash = location.hash || "#/";
+  renderAskFab(hash);
   const tokenMatch = hash.match(/^#\/token\/(0x[a-fA-F0-9]{40})$/);
   const walletMatch = hash.match(/^#\/wallet\/(0x[a-fA-F0-9]{40})$/);
   if (tokenMatch) {
