@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-238%20passing-D9316A?style=flat-square&labelColor=15050A">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-84.49%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-274%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-85.40%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-7-F5E8EC?style=flat-square&labelColor=15050A">
@@ -224,8 +224,8 @@ npm test
 ```
 
 ```
-tests 238
-pass 238
+tests 274
+pass 274
 fail 0
 ```
 
@@ -234,10 +234,10 @@ npm run test:coverage
 ```
 
 ```
-all files   |  84.49 |    85.38 |   66.01 |
+all files   |  85.40 |    86.31 |   68.15 |
 ```
 
-84.49% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+85.40% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
 npm run test:integration   # the five test files that exercise multiple layers together —
@@ -263,9 +263,9 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 <summary>Priority order, 9 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
 1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
-2. Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot
+2. ~~Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot~~ — **done**
 3. Evaluate Bitquery for Uniswap v4 pricing and decoded trade history — a provider swap, not a rewrite
-4. Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate
+4. ~~Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate~~ — **done**: real realized PnL and win rate per wallet, see [docs/DATA.md](./docs/DATA.md#smart-money)
 5. Decide on a social data source, or keep it honestly unavailable
 6. Wallet-clustering detection off existing transfer data
 7. Batch the feed endpoint's per-launch RPC calls via multicall

@@ -63,6 +63,38 @@ function createSchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_wallet_activity_wallet ON wallet_activity(wallet, taken_at);
     CREATE INDEX IF NOT EXISTS idx_wallet_activity_token ON wallet_activity(token, taken_at);
 
+    -- Phase 4: one row per real CurveBuy/CurveSell, with the price implied
+    -- by that exact trade (quote amount / token amount) — the price-at-trade
+    -- that wallet_activity never had. UNIQUE(tx_hash, log_index) makes
+    -- re-scanning the same blocks idempotent: a trade is only ever counted once.
+    CREATE TABLE IF NOT EXISTS wallet_trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wallet TEXT NOT NULL,
+      token TEXT NOT NULL,
+      tx_hash TEXT NOT NULL,
+      log_index INTEGER NOT NULL,
+      block_number INTEGER NOT NULL,
+      side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+      token_amount REAL NOT NULL,
+      quote_amount REAL NOT NULL,
+      price_in_pair REAL NOT NULL,
+      UNIQUE (tx_hash, log_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_wallet_trades_wallet ON wallet_trades(wallet, token, block_number, log_index);
+
+    -- Which block ranges of a token's curve have actually been scanned for
+    -- trades. PnL is only computed over the contiguous stretch starting at
+    -- the token's launch block — a gap means a missed buy or sell, and a
+    -- cost basis built on a missed trade would be wrong, not just imprecise.
+    CREATE TABLE IF NOT EXISTS trade_scan_coverage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL,
+      launch_block INTEGER NOT NULL,
+      from_block INTEGER NOT NULL,
+      to_block INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_trade_scan_coverage_token ON trade_scan_coverage(token, from_block);
+
     -- Meme Radar candidates come from the signals table; this table is the
     -- durable monitoring queue itself — which tokens FLETCH is watching,
     -- and enough state about each to schedule the next check without

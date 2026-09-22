@@ -5,6 +5,8 @@ import { readLaunchRecord, readCurveState, type LaunchRecord } from "./launch.js
 import { NATIVE_ETH, curveAbi } from "./pons.js";
 import { config } from "../core/config.js";
 import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
+import { decodeCurveTrade } from "./curveTrades.js";
+import { recordCurveScan } from "../persistence/walletTradesStore.js";
 
 export interface LiquidityInfo {
   hasPool: boolean;
@@ -94,7 +96,16 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
   };
 }
 
-/** Implied price from the curve's own most recent CurveBuy/CurveSell — a real trade, not an estimate. */
+/**
+ * Implied price from the curve's own most recent CurveBuy/CurveSell — a real
+ * trade, not an estimate.
+ *
+ * Phase 4: the same logs this already fetches are also recorded as
+ * per-wallet trades with their exact price-at-trade (persistence/
+ * walletTradesStore.ts) — zero extra RPC calls. Only for native-ETH-paired
+ * launches, so every recorded amount is in one known unit. A persistence
+ * failure is logged and never breaks the price read itself.
+ */
 async function lastTradePrice(launch: LaunchRecord): Promise<number | null> {
   const client = getClient();
   const latest = await client.getBlockNumber();
@@ -113,11 +124,20 @@ async function lastTradePrice(launch: LaunchRecord): Promise<number | null> {
       config.logScanChunkBlocks
     ),
   ]);
+
+  if (launch.pairToken.toLowerCase() === NATIVE_ETH) {
+    try {
+      const trades = [...buys, ...sells]
+        .map((l) => decodeCurveTrade(l))
+        .filter((t): t is NonNullable<typeof t> => t !== null);
+      recordCurveScan(launch.token, Number(launch.launchBlock), Number(fromBlock), Number(latest), trades);
+    } catch (e) {
+      console.warn(`Recording curve trades for ${launch.token} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const all = [...buys, ...sells].sort((a, b) => Number(b.blockNumber! - a.blockNumber!));
   if (all.length === 0) return null;
-  const last = all[0];
-  const args = last.args as any;
-  if ("quoteIn" in args && args.tokensOut > 0n) return Number(formatUnits(args.quoteIn, 18)) / Number(formatUnits(args.tokensOut, 18));
-  if ("quoteOut" in args && args.tokensIn > 0n) return Number(formatUnits(args.quoteOut, 18)) / Number(formatUnits(args.tokensIn, 18));
-  return null;
+  const last = decodeCurveTrade(all[0]);
+  return last ? last.quoteAmount / last.tokenAmount : null;
 }

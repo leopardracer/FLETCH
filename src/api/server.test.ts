@@ -163,14 +163,17 @@ test("GET /api/tokens/:address/signals responds 200 with an empty array for a to
   assert.deepEqual(body.signals, []);
 });
 
-test("GET /api/wallets/:address responds 200 with real wallet intelligence — every skill metric explicitly NOT_YET_IMPLEMENTED, no RPC needed", async () => {
+test("GET /api/wallets/:address responds 200 with real wallet intelligence — no recorded trades means UNAVAILABLE PnL/win rate, never a number, no RPC needed", async () => {
   const res = await fetch(`${baseUrl}/api/wallets/${WALLET}`);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.wallet, WALLET);
   assert.equal(body.profile, null);
-  assert.equal(body.metrics.realizedPnl.availability, "NOT_YET_IMPLEMENTED");
-  assert.equal(body.metrics.winRate.availability, "NOT_YET_IMPLEMENTED");
+  assert.deepEqual(body.positions, []);
+  assert.equal(body.metrics.realizedPnl.availability, "UNAVAILABLE");
+  assert.equal(body.metrics.realizedPnl.value, undefined);
+  assert.equal(body.metrics.winRate.availability, "UNAVAILABLE");
+  assert.equal(body.metrics.winRate.value, undefined);
 });
 
 test("GET / serves the dashboard shell", async () => {

@@ -42,7 +42,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | `GET /api/tokens/:address/history` | persisted snapshot history for that token |
 | `GET /api/tokens/:address/signals` | signal timeline for that token |
 | `GET /api/tokens/:address/wallets` | wallet activity for that token (per-token scope) |
-| `GET /api/wallets/:address` | wallet intelligence — real participation record + explicit NOT_YET_IMPLEMENTED metrics |
+| `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized PnL + win rate from price-at-trade; the rest explicit NOT_YET_IMPLEMENTED |
 
 ## Environment variables
 
@@ -141,7 +141,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-84.49% line coverage / 85.38% branch / 66.01% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+85.40% line coverage / 86.31% branch / 68.15% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
@@ -167,9 +167,9 @@ npm run test:coverage
 Roughly in priority order:
 
 1. Smoke-test `src/data/providers/blockscoutProvider.ts` against a real API key; wire it into the feed endpoint to cut per-launch RPC round-trips.
-2. Give the signal engine the token's launch timestamp so `ACTIVITY_ACCELERATION` can compare against a true lifetime-average baseline, not just the last snapshot's rate (see [SIGNALS.md](./SIGNALS.md)).
+2. ~~Give the signal engine the token's launch timestamp so `ACTIVITY_ACCELERATION` can compare against a true lifetime-average baseline~~ — **done** (see [SIGNALS.md](./SIGNALS.md)).
 3. Evaluate Bitquery for post-graduation Uniswap v4 pricing and decoded trade history — a `ChainDataProvider` swap, not a rewrite.
-4. Record price-at-trade in `wallet_activity` (currently only net token-amount change) — the specific missing piece blocking real PnL/win-rate in `walletScore.ts`.
+4. ~~Record price-at-trade per wallet~~ — **done**: `wallet_trades` + `wallets/positions.ts` (see [DATA.md](./DATA.md#smart-money)).
 5. Decide on and wire a social data source, or keep it explicitly unavailable long-term.
 6. Wallet-clustering detection off existing transfer data.
 7. Batch the feed endpoint's per-launch RPC calls via multicall.
