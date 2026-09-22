@@ -470,10 +470,11 @@
 
       <div class="card" style="padding:26px;">
         <div style="font-family:var(--mono);font-weight:700;font-size:14px;color:var(--data);margin-bottom:14px;">D · AI LAYER</div>
-        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin-bottom:18px;">Optional, off by default. Rephrases what FLETCH already found, or answers questions by calling FLETCH's own real functions as tools — never given raw chain data to reason from.</div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin-bottom:18px;">Optional, off by default. Rephrases what FLETCH already found, or answers questions by calling FLETCH's own real functions as tools — never given raw chain data to reason from. Or skip the operator's key entirely: chat straight from your browser with your own.</div>
         <div style="font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
           <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">SUMMARY · opt-in</span>
           <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">CHAT AGENT</span>
+          <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">BYOK CHAT</span>
         </div>
         <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" style="font-family:var(--mono);font-size:11.5px;color:var(--pink);text-decoration:none;">docs/AI.md <span class="flow-arrow">→</span></a>
       </div>
@@ -643,7 +644,7 @@
       </div>
       <div style="padding:20px 0;">
         <div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;"><span>Does FLETCH use AI to predict prices?</span><span class="faq-plus">+</span></div>
-        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);">No. Every signal and risk finding is still templated from real computed numbers, never a free-form model touching raw chain data — and FLETCH never predicts what happens next. An optional AI layer exists (off by default) for two narrower jobs: rephrasing FLETCH's own findings into plain English, and a read-only chat agent that answers by calling FLETCH's real functions as tools. Neither is given raw chain data to reason from, and neither can trade. <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" style="color:var(--pink);text-decoration:none;">docs/AI.md</a></div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);">No. Every signal and risk finding is still templated from real computed numbers, never a free-form model touching raw chain data — and FLETCH never predicts what happens next. An optional AI layer exists (off by default) for two narrower jobs: rephrasing FLETCH's own findings into plain English, and a read-only chat agent that answers by calling FLETCH's real functions as tools. You can also skip the operator's key and chat with your own — the browser talks straight to Anthropic, FLETCH's server never sees it. Neither path is given raw chain data to reason from, and neither can trade. <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" style="color:var(--pink);text-decoration:none;">docs/AI.md</a></div>
       </div>
     </div>
   </div>
