@@ -686,9 +686,9 @@
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 2</div>
           <div style="font-family:var(--sans);font-weight:700;font-size:17px;">BLOCKSCOUT, LIVE</div>
         </div>
-        <span class="chip chip-medium soft-pulse" style="flex:none;">NEXT</span>
+        <span class="chip chip-high" style="flex:none;">BLOCKED</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Verify the Blockscout provider against a real API key and wire it into the feed — cuts per-token RPC round-trips at scale.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Code is written, RPC key is live — Blockscout's own PRO API returns Unauthorized for chain_id=4663 specifically (confirmed against multiple endpoint shapes, including their own Robinhood Chain quick-start example) despite the chain being listed as supported and the same key working fine on chain_id=1. Reported to Blockscout; picks back up once that's resolved on their end.</p>
     </div>
 
     <div class="card" style="padding:16px 20px;margin-bottom:10px;">
