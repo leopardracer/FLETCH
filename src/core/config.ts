@@ -56,6 +56,17 @@ const envSchema = z.object({
   // localhost. Per IP, sliding window.
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().default(120),
+
+  // --- Optional: AI layer (src/ai/) ---
+  // Unset by default — every AI feature (natural-language summaries, the
+  // chat agent) must degrade to "disabled" or "deterministic fallback"
+  // rather than throw when this is empty. See src/ai/client.ts.
+  // Never call the AI on raw chain data: only on numbers FLETCH's
+  // deterministic engine already computed (src/ai/explain.ts, ai/tools.ts).
+  ANTHROPIC_API_KEY: z.string().optional().default(""),
+  // Current model catalog: https://docs.claude.com — check there before
+  // changing this default, since model names are periodically retired.
+  ANTHROPIC_MODEL: z.string().optional().default("claude-sonnet-5"),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -94,6 +105,15 @@ export const config = {
   maxHolderScanBlocks: BigInt(env.MAX_HOLDER_SCAN_BLOCKS),
   rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
   rateLimitMax: env.RATE_LIMIT_MAX,
+  anthropicApiKey: env.ANTHROPIC_API_KEY || undefined,
+  anthropicModel: env.ANTHROPIC_MODEL,
+
+  /** True when the AI layer (natural-language summaries, chat agent) has
+   *  a key to work with — otherwise those features return their
+   *  deterministic/disabled fallback instead of calling out. */
+  hasAnthropic(): boolean {
+    return !!env.ANTHROPIC_API_KEY;
+  },
 
   /** True when Blockscout's accelerated holder/tx endpoints are usable —
    *  otherwise providers must fall back to raw RPC log replay. */

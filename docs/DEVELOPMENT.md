@@ -85,7 +85,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 221 tests across 22 files |
+| `npm test` | The full suite — 234 tests across 24 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |
@@ -104,6 +104,8 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 | `risk/riskAnalysis.test.ts` | 13 | every finding threshold, including the trend-based ones (liquidity deterioration, abnormal sell pressure) that only fire with real snapshot history, and the phase-transition guard suppressing a false "collapse" across a graduation |
 | `persistence/snapshots.test.ts` | 16 | the comparison-window lookup, rate limiting, history ordering, per-token isolation, null-score round-tripping, latest-snapshot lookup, risk-level and phase persistence, retention pruning, and recent-activity counts |
 | `ai/explain.test.ts` | 7 | every bullet traces to a real signal's own text; risk-derived signal types don't get double-shown |
+| `ai/rephrase.test.ts` | 5 | rephrase-only LLM call degrades to the deterministic bullets (never throws, never blank) with no client, a failed call, or an empty model response — injects a fake Anthropic client, no real API key |
+| `ai/chatAgent.test.ts` | 8 | the tool-use loop against a fake Anthropic client and fake deps: disabled-without-a-key reply, each of the three tools, invalid-address rejection before any chain call, the radar result-count cap, and the `maxTurns` graceful stop instead of looping forever |
 | `persistence/signalsStore.test.ts` | 14 | severity-then-recency ordering, per-token isolation, case-insensitive addressing, time-windowed queries, distinct-token discovery for Meme Radar, retention pruning, and recent-activity counts |
 | `persistence/walletActivityStore.test.ts` | 6 | profile aggregation, token-breadth dedup, per-wallet isolation |
 | `wallets/walletScore.test.ts` | 5 | every metric is explicitly `NOT_YET_IMPLEMENTED` with a stated reason — never a computed number, even with a long recorded history |
@@ -139,15 +141,18 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-83.56% line coverage / 83.53% branch / 70.91% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+84.29% line coverage / 85.24% branch / 65.74% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
-| `signals/`, `scoring/`, `risk/`, `ai/`, `persistence/`, `monitoring/`, `wallets/walletScore.ts` | 90–100% | pure logic or fully mockable via in-memory SQLite and dependency-injected fakes — no excuse not to cover it |
+| `signals/`, `scoring/`, `risk/`, `persistence/`, `monitoring/`, `wallets/walletScore.ts`, `ai/explain.ts`, `ai/rephrase.ts`, `ai/chatAgent.ts` | 90–100%¹ | pure logic or fully mockable via in-memory SQLite and dependency-injected fakes (`chatAgent.test.ts` / `rephrase.test.ts` inject a fake Anthropic client — no real API key needed) — no excuse not to cover it |
 | `api/server.ts` | ~70% | the success paths that need a live RPC connection are the uncovered lines; every error path is covered |
-| `chain/*.ts`, `data/providers/rpcProvider.ts` | mostly low | these call `viem` against a real RPC endpoint — meaningfully testing the calls themselves needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. The pieces that don't touch the network directly (`hunt.ts`'s `enrichOneLaunch` resilience, `holders.ts`'s chunking/bounding) are extracted and unit-tested; the RPC calls themselves are exercised manually against a real `RPC_URL` instead |
+| `chain/*.ts`, `data/providers/rpcProvider.ts`, `intel/tokenIntel.ts` | mostly low | these call `viem` against a real RPC endpoint (`tokenIntel.ts` is the assembly point that does this on every field) — meaningfully testing the calls themselves needs either a live testnet or mocking the chain client, and mocking blockchain responses risks presenting fabricated data as verified, which this project's own rules rule out. The pieces that don't touch the network directly (`hunt.ts`'s `enrichOneLaunch` resilience, `holders.ts`'s chunking/bounding) are extracted and unit-tested; the RPC calls themselves are exercised manually against a real `RPC_URL` instead |
+| `ai/client.ts` | ~68% | same exception, one level up the stack: constructing the real Anthropic client only happens with a real `ANTHROPIC_API_KEY`, which the test suite deliberately never sets (see `docs/AI.md#testing`) — every other AI module takes a client as a parameter specifically so it never needs to |
 | `poller/poller.ts` | ~50% | only the off-switch is unit-tested; its actual work is `monitoringService.ts`'s cycles, which are fully covered separately |
 | `social.ts`, `wallets/smartMoney.ts` | low % but tiny | these are one-function honest-unavailable stubs — low coverage on a five-line file isn't a meaningful signal |
+
+¹ `chatAgent.ts` itself is 94% — the ~6% gap is `createDefaultAgentDeps()`'s real wiring (a live `RpcChainDataProvider`), the same live-network exception as the row below, not untested logic.
 
 ## Continuous Integration
 

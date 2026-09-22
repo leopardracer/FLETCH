@@ -4,11 +4,11 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-221%20passing-D9316A?style=flat-square&labelColor=15050A">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-83.56%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-234%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-84.29%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
-  <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-5-F5E8EC?style=flat-square&labelColor=15050A">
+  <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-7-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="fabricated data" src="https://img.shields.io/badge/fabricated%20data-0-D9316A?style=flat-square&labelColor=15050A">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-F5E8EC?style=flat-square&labelColor=15050A">
 </p>
@@ -19,14 +19,14 @@
 
 Meme tokens on Robinhood Chain launch by the thousand, and most of what "moves" is noise. FLETCH is the intelligence layer that reads the chain directly — launches, trades, holders, liquidity, deployer behavior — and turns it into three plain-English answers: what's happening, why, and whether it's worth your attention. Every number is either a real chain read or explicitly marked `unavailable`. Nothing here is a fabricated demo dressed up as a live product.
 
-FLETCH is **not** a token screener, a trading bot, an AI chatbot, or a price predictor. There is no execution path in this repository.
+FLETCH is **not** a token screener, a trading bot, or a price predictor. There is no execution path in this repository — an optional, read-only chat agent exists (off by default, see [docs/AI.md](./docs/AI.md)), but it can only report what FLETCH's own deterministic engine already found; it can't trade, and it won't predict price or tell you whether something is "safe to buy."
 
 <details open>
 <summary><b>Contents</b></summary>
 
 **What & why** — [What is FLETCH?](#what-is-fletch) · [How it works](#how-it-works) · [Watch it run](#watch-it-run)
 
-**Product** — [Early Signals](#early-signals) · [Signal Engine](#signal-engine) · [Continuous Monitoring](#continuous-monitoring) · [Meme Radar](#meme-radar) · [FLETCH Score](#fletch-score) · [Why is it moving?](#why-is-it-moving) · [Risk Intelligence](#risk-intelligence) · [Smart Money](#smart-money)
+**Product** — [Early Signals](#early-signals) · [Signal Engine](#signal-engine) · [Continuous Monitoring](#continuous-monitoring) · [Meme Radar](#meme-radar) · [FLETCH Score](#fletch-score) · [Why is it moving?](#why-is-it-moving) · [Risk Intelligence](#risk-intelligence) · [Smart Money](#smart-money) · [AI Layer](#ai-layer)
 
 **Using it** — [Architecture](#architecture) · [Quick Start](#quick-start) · [Live Data](#live-data) · [Demo](#demo)
 
@@ -143,6 +143,8 @@ Exact formulas, weight re-normalization, and what "not yet a growth rate" means 
 
 Every bullet traces back to a number FLETCH already computed — buy/sell counts, holder count, liquidity, risk findings. This is deliberately **not** a free-form LLM call: the safest way to guarantee the brief's "AI must never invent blockchain data" rule is to never let generated text see raw numbers and write from scratch. See `src/ai/explain.ts` and its test file for exactly what that means in code.
 
+Optionally, `?summary=ai` on the token endpoint rephrases these same bullets into one plain-English paragraph — same "never see raw numbers, only rephrase what's already computed" rule, via a real LLM call this time. Off by default (needs `ANTHROPIC_API_KEY`); the deterministic bullets above are always present either way. Full writeup, plus the read-only chat agent built on the same principle: [docs/AI.md](./docs/AI.md).
+
 ```
 DEMO — illustrative shape only
 
@@ -164,6 +166,15 @@ RISK
 ## Smart Money
 
 Not implemented as real intelligence yet — and the dashboard says so, in `src/wallets/smartMoney.ts` and on the Wallets tab, rather than shipping a leaderboard built on nothing. Real win-rate/early-entry tracking needs either a persistence layer accumulating outcomes over weeks-to-months, or an indexer with that history already built. See [docs/DATA.md](./docs/DATA.md#smart-money) for exactly what closes this gap.
+
+## AI Layer
+
+Two optional, off-by-default features, both built on **rephrase/report**, never **generate**: the model never sees raw chain data and is never asked to reason about whether a token is good or bad from scratch.
+
+- **Natural-language summary** (`GET /api/tokens/:address?summary=ai`) rephrases the same deterministic bullets from [Why is it moving?](#why-is-it-moving) into one paragraph — same "never see raw numbers, only rephrase what's already computed" rule, via a real LLM call.
+- **Chat agent** (`POST /api/chat`) answers questions about a token or wallet by calling FLETCH's own real functions as tools and reporting back only what they returned — the same `getTokenIntel()` the token API itself calls, so the agent can't report a different number than the dashboard does.
+
+Both require `ANTHROPIC_API_KEY`; without it, they degrade to "field omitted" / "chat not configured" rather than throwing or faking a response. Full writeup: [docs/AI.md](./docs/AI.md).
 
 ## Architecture
 
@@ -212,8 +223,8 @@ npm test
 ```
 
 ```
-tests 221
-pass 221
+tests 234
+pass 234
 fail 0
 ```
 
@@ -222,10 +233,10 @@ npm run test:coverage
 ```
 
 ```
-all files   |  83.56 |    83.53 |   70.91 |
+all files   |  84.29 |    85.24 |   65.74 |
 ```
 
-83.56% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer — sits at 90–100%. The lower spots are `chain/*.ts` and `data/providers/rpcProvider.ts`, which genuinely need a live RPC connection to exercise meaningfully; per this project's own rule against fabricating chain data, those aren't mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+84.29% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
 npm run test:integration   # the five test files that exercise multiple layers together —

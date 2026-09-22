@@ -3,6 +3,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { config } from "../core/config.js";
 import { pingChain, type ChainPingResult } from "../chain/client.js";
 import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
@@ -11,7 +12,7 @@ import { readTokenInfo } from "../chain/token.js";
 import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
 import { getSocialSignalForToken } from "../social/social.js";
 import { getWalletIntelligence } from "../wallets/walletScore.js";
-import { explainWhyItsMoving } from "../ai/explain.js";
+import { getTokenIntel } from "../intel/tokenIntel.js";
 import { analyzeAndPersist } from "../signals/signalService.js";
 import { pickTopSignal } from "../signals/types.js";
 import { getSnapshotHistory } from "../persistence/snapshots.js";
@@ -22,6 +23,8 @@ import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
 import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
+import { rephraseSummary } from "../ai/rephrase.js";
+import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -38,6 +41,15 @@ export function buildHealthResponse(chain: ChainPingResult, blockscoutConfigured
 }
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+// Capped at 20 turns / 4000 chars each — enough for a real conversation,
+// bounded so one request can't blow up the tool-use loop's token usage.
+const chatRequestSchema = z.object({
+  messages: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(4000) }))
+    .min(1)
+    .max(20),
+});
 
 /**
  * Every route below is async and needs the exact same error handling:
@@ -192,7 +204,11 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
     res.json({ windowSeconds, count: radar.length, radar: radar.slice(0, limit) });
   }));
 
-  // Full token intelligence page.
+  // Full token intelligence page. Pass ?summary=ai to also get a
+  // natural-language rephrase of whyIsItMoving (src/ai/rephrase.ts) —
+  // opt-in and omitted by default so a normal page view never pays the
+  // extra LLM latency/cost, and never changes the shape of the plain
+  // response existing callers already depend on.
   app.get("/api/tokens/:address", asyncRoute(async (req, res) => {
     const address = req.params.address as `0x${string}`;
     const info = await readTokenInfo(address);
@@ -202,35 +218,14 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
       return;
     }
 
-    const metrics = await provider.getTokenMetrics(address);
+    const intel = await getTokenIntel(address, info, provider);
+    const body: Record<string, unknown> = bigIntSafe(intel) as unknown as Record<string, unknown>;
 
-    const launches = await scanRecentLaunches(50_000n);
-    const launch = launches.find((l) => l.token.toLowerCase() === address.toLowerCase()) ?? null;
+    if (req.query.summary === "ai") {
+      body.naturalLanguageSummary = await rephraseSummary(intel.whyIsItMoving);
+    }
 
-    const smartMoney = await getSmartMoneyForToken(address);
-    const social = await getSocialSignalForToken(address);
-    const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social);
-    const why = explainWhyItsMoving(signals, risk);
-
-    res.json({
-      token: { address, symbol: info.symbol, name: info.name, contractExists: info.contractExists },
-      metrics: bigIntSafe(metrics),
-      risk,
-      fletchScore: score,
-      signals,
-      whyIsItMoving: why,
-      smartMoney,
-      social,
-      dataAvailability: {
-        liquidity: metrics.liquidityUsd !== null ? "REAL" : "UNAVAILABLE",
-        holders: metrics.holderCount !== null ? "REAL" : "UNAVAILABLE",
-        whaleActivity: metrics.holderCount !== null ? "REAL" : "UNAVAILABLE",
-        smartMoney: smartMoney.available ? "REAL" : "NOT_YET_IMPLEMENTED",
-        social: social.available ? "REAL" : "NOT_YET_IMPLEMENTED",
-        postGraduationPricing: "NOT_YET_IMPLEMENTED",
-        blockscoutAcceleration: config.hasBlockscout() ? "REAL" : "REQUIRES_API_KEY",
-      },
-    });
+    res.json(body);
   }));
 
   // Snapshot history — "how has this token's score evolved?"
@@ -260,6 +255,23 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
   app.get("/api/wallets/:address", asyncRoute(async (req, res) => {
     const address = req.params.address as `0x${string}`;
     res.json(getWalletIntelligence(address));
+  }));
+
+  // Chat agent — answers questions about tokens/wallets by calling the
+  // same real deterministic functions the rest of the API uses
+  // (src/ai/chatAgent.ts). Returns a plain "not configured" reply if
+  // ANTHROPIC_API_KEY is unset, same as every other AI feature here.
+  app.post("/api/chat", asyncRoute(async (req, res) => {
+    const parsed = chatRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Expected { messages: [{ role: 'user'|'assistant', content: string }] }, 1-20 messages.",
+      });
+      return;
+    }
+
+    const result = await runChatAgent(parsed.data.messages, createDefaultAgentDeps());
+    res.json(result);
   }));
 
   return app;
