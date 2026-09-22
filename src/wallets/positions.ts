@@ -30,6 +30,8 @@ export interface Position {
   /** Realized PnL in the pair asset; null when the cost basis is unknown. */
   realizedPnlPair: number | null;
   tokensHeld: number;
+  /** Pair-asset cost of the tokens still held (average-cost); 0 when closed, null when unknown. */
+  costBasisPair: number | null;
   firstBlock: number;
   lastBlock: number;
 }
@@ -80,7 +82,7 @@ export function computePositions(
     const first = tokenTrades[0].blockNumber;
     const last = tokenTrades[tokenTrades.length - 1].blockNumber;
     if (unknownBasis) {
-      positions.push({ token, status: "UNKNOWN_COST_BASIS", tradesCounted: tokenTrades.length, realizedPnlPair: null, tokensHeld: 0, firstBlock: first, lastBlock: last });
+      positions.push({ token, status: "UNKNOWN_COST_BASIS", tradesCounted: tokenTrades.length, realizedPnlPair: null, tokensHeld: 0, costBasisPair: null, firstBlock: first, lastBlock: last });
       continue;
     }
     const closed = peak > 0 && held <= peak * CLOSED_DUST_FRACTION;
@@ -90,6 +92,7 @@ export function computePositions(
       tradesCounted: tokenTrades.length,
       realizedPnlPair: realized,
       tokensHeld: closed ? 0 : held,
+      costBasisPair: closed ? 0 : costBasis,
       firstBlock: first,
       lastBlock: last,
     });
@@ -118,4 +121,41 @@ export function summarizePositions(positions: Position[]): PnlSummary {
     winningClosedPositions: closed.filter((p) => (p.realizedPnlPair ?? 0) > 0).length,
     excludedUnknownCostBasis: positions.length - known.length,
   };
+}
+
+/**
+ * Unrealized PnL for one OPEN position: tokens still held × the token's
+ * current curve price − what they cost. Null (never a guess) unless every
+ * condition for an honest number holds:
+ *  - the position is OPEN with a known cost basis;
+ *  - the token hasn't graduated (post-graduation v4 pricing isn't read);
+ *  - the price is recent enough (maxPriceAgeSeconds);
+ *  - FLETCH's gap-free coverage reaches its most recent scan — otherwise a
+ *    sell after a gap could mean the wallet no longer holds these tokens.
+ */
+export interface MarkPrice {
+  priceInPair: number | null;
+  takenAt: number;
+  graduated: boolean | null;
+}
+
+export function unrealizedPnlFor(
+  p: Position,
+  mark: MarkPrice | null,
+  coverage: { coveredThrough: number | null; latestScannedTo: number } | null,
+  now: number,
+  maxPriceAgeSeconds: number
+): number | null {
+  if (p.status !== "OPEN" || p.costBasisPair === null) return null;
+  if (!mark || mark.priceInPair === null || mark.graduated !== false) return null;
+  if (now - mark.takenAt > maxPriceAgeSeconds) return null;
+  if (!coverage || coverage.coveredThrough === null || coverage.coveredThrough < coverage.latestScannedTo) return null;
+  return p.tokensHeld * mark.priceInPair - p.costBasisPair;
+}
+
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }

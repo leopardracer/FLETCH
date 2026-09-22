@@ -147,6 +147,37 @@ export function recordCheckFailure(
   ).run(now, failureCount, error, nextCheckAt, status, now, token.toLowerCase());
 }
 
+/**
+ * Reschedules a token whose check was cut short by an RPC rate limit —
+ * the provider's problem, not the token's. Touches only next_check_at:
+ * no failure count, no last_error, no status change.
+ */
+export function rescheduleWithoutPenalty(token: `0x${string}`, nextCheckAt: number, now: number): void {
+  const db = getDb();
+  db.prepare(`UPDATE monitored_tokens SET next_check_at = ?, updated_at = ? WHERE token = ?`).run(nextCheckAt, now, token.toLowerCase());
+}
+
+/**
+ * Gives FAILED tokens a fresh set of retries once they've sat out
+ * `coolOffSeconds` since their last check — so a stretch of real failures
+ * (an RPC outage, say) doesn't leave tokens dead until a process restart.
+ * Still bounded: a genuinely broken token burns at most
+ * MAX_CONSECUTIVE_FAILURES checks per cool-off window. Returns how many
+ * tokens were reactivated. coolOffSeconds <= 0 disables it.
+ */
+export function reactivateFailed(now: number, coolOffSeconds: number): number {
+  if (coolOffSeconds <= 0) return 0;
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE monitored_tokens
+       SET status = 'ACTIVE', failure_count = 0, next_check_at = ?, updated_at = ?
+       WHERE status = 'FAILED' AND last_checked_at <= ?`
+    )
+    .run(now, now, now - coolOffSeconds);
+  return Number(result.changes);
+}
+
 /** Explicitly bumps (or lowers) a token's priority — e.g. when it starts
  *  producing signals and should be checked more often. Does not touch
  *  scheduling directly; the next successful/failed check picks up the

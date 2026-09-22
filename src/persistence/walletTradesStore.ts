@@ -85,13 +85,21 @@ export function recordCurveScan(
   }
 }
 
+export interface TradeCoverage {
+  launchBlock: number;
+  /** Last block of gap-free history from launch; null if the launch block itself was never scanned. */
+  coveredThrough: number | null;
+  /** End of the most recent scan of any kind. */
+  latestScannedTo: number;
+}
+
 /**
- * The last block up to which this token's curve history is known with no
- * gaps, starting from its launch block — or null if the launch block itself
- * was never scanned (e.g. every scan so far was capped by MAX_HOLDER_SCAN_BLOCKS
- * for an older token). Merges overlapping/adjacent ranges; stops at the first gap.
+ * What FLETCH has actually scanned of a token's curve. Merges overlapping/
+ * adjacent ranges starting at the launch block and stops at the first gap —
+ * e.g. a first scan capped by MAX_HOLDER_SCAN_BLOCKS for an older token
+ * means the start of its history was never seen, so coveredThrough is null.
  */
-export function getContiguousCoverageFromLaunch(token: string): number | null {
+export function getTradeCoverage(token: string): TradeCoverage | null {
   const db = getDb();
   const rows = db
     .prepare(`SELECT launch_block, from_block, to_block FROM trade_scan_coverage WHERE token = ? ORDER BY from_block ASC`)
@@ -103,7 +111,16 @@ export function getContiguousCoverageFromLaunch(token: string): number | null {
     if (r.from_block > coveredThrough + 1) break;
     coveredThrough = Math.max(coveredThrough, r.to_block);
   }
-  return coveredThrough >= launchBlock ? coveredThrough : null;
+  return {
+    launchBlock,
+    coveredThrough: coveredThrough >= launchBlock ? coveredThrough : null,
+    latestScannedTo: Math.max(...rows.map((r) => r.to_block)),
+  };
+}
+
+/** Shorthand: the last block of gap-free history from launch, or null. */
+export function getContiguousCoverageFromLaunch(token: string): number | null {
+  return getTradeCoverage(token)?.coveredThrough ?? null;
 }
 
 /** Every recorded trade for a wallet, in true chain order (block, then log index). */

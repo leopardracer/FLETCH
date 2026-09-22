@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computePositions, summarizePositions } from "./positions.js";
+import { computePositions, summarizePositions, unrealizedPnlFor, median } from "./positions.js";
 import type { StoredTrade } from "../persistence/walletTradesStore.js";
 
 const WALLET = "0xcccccccccccccccccccccccccccccccccccccccc" as const;
@@ -71,4 +71,29 @@ test("summary excludes unknown-cost-basis positions from PnL and counts them sep
   const s = summarizePositions(positions);
   assert.equal(s.positionsCounted, 1);
   assert.equal(s.excludedUnknownCostBasis, 1);
+});
+
+test("cost basis follows average cost: partial sell keeps the average, removes the sold share", () => {
+  const [p] = computePositions([t(A, "buy", 1000, 1, 10), t(A, "buy", 1000, 3, 11), t(A, "sell", 500, 2, 12)], fullyCovered);
+  assert.ok(Math.abs(p.costBasisPair! - 3) < 1e-12); // 1500 left × avg 0.002
+});
+
+test("unrealizedPnlFor refuses every case it can't back with real data", () => {
+  const [open] = computePositions([t(A, "buy", 1000, 1, 10)], fullyCovered);
+  const mark = { priceInPair: 0.002, takenAt: 1000, graduated: false };
+  const cov = { coveredThrough: 500, latestScannedTo: 500 };
+  assert.equal(unrealizedPnlFor(open, mark, cov, 1000, 3600), 1);
+  assert.equal(unrealizedPnlFor(open, { ...mark, graduated: null }, cov, 1000, 3600), null);
+  assert.equal(unrealizedPnlFor(open, { ...mark, priceInPair: null }, cov, 1000, 3600), null);
+  assert.equal(unrealizedPnlFor(open, mark, { coveredThrough: 400, latestScannedTo: 500 }, 1000, 3600), null);
+  assert.equal(unrealizedPnlFor(open, mark, cov, 1000 + 3601, 3600), null);
+  assert.equal(unrealizedPnlFor(open, null, cov, 1000, 3600), null);
+  const [closed] = computePositions([t(A, "buy", 10, 1, 10), t(A, "sell", 10, 2, 11)], fullyCovered);
+  assert.equal(unrealizedPnlFor(closed, mark, cov, 1000, 3600), null);
+});
+
+test("median handles odd, even and empty inputs", () => {
+  assert.equal(median([5, 1, 3]), 3);
+  assert.equal(median([4, 1, 3, 2]), 2.5);
+  assert.equal(median([]), null);
 });

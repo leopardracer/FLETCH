@@ -36,6 +36,14 @@ const envSchema = z.object({
   MAX_CONCURRENT_TOKENS: z.coerce.number().default(5), // in-flight chain reads per monitoring cycle — bounds RPC load regardless of queue size
   MAX_MONITORED_TOKENS: z.coerce.number().default(500), // hard cap on the monitoring queue — bounded storage/RPC even if launches vastly outpace check capacity
   MAX_CONSECUTIVE_FAILURES: z.coerce.number().default(5), // a token failing this many checks in a row is marked FAILED and stops being scheduled, so one permanently-broken address can't retry forever
+  FAILED_REACTIVATE_AFTER_SECONDS: z.coerce.number().default(21_600), // a FAILED token gets a fresh set of retries after this cool-off (6h) instead of needing a process restart; 0 disables
+  RPC_BACKOFF_BASE_MS: z.coerce.number().default(60_000), // first pause after an RPC rate-limit error; doubles on each consecutive one
+  RPC_BACKOFF_MAX_MS: z.coerce.number().default(3_600_000), // ceiling for that pause — also used directly for a provider's daily-quota error
+  // Optional: address of a Multicall3 contract on this chain. When set, concurrent
+  // readContract calls (e.g. a token's name/symbol/decimals/totalSupply) are
+  // aggregated into ONE eth_call. Left unset by default because it's only safe
+  // once verified — check `eth_getCode` at the address returns non-empty bytecode.
+  MULTICALL3_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional().or(z.literal("")).default(""),
   SIGNAL_RETENTION_DAYS: z.coerce.number().default(30),
   SNAPSHOT_RETENTION_DAYS: z.coerce.number().default(30),
 
@@ -99,6 +107,10 @@ export const config = {
   maxConcurrentTokens: env.MAX_CONCURRENT_TOKENS,
   maxMonitoredTokens: env.MAX_MONITORED_TOKENS,
   maxConsecutiveFailures: env.MAX_CONSECUTIVE_FAILURES,
+  failedReactivateAfterSeconds: env.FAILED_REACTIVATE_AFTER_SECONDS,
+  rpcBackoffBaseMs: env.RPC_BACKOFF_BASE_MS,
+  rpcBackoffMaxMs: env.RPC_BACKOFF_MAX_MS,
+  multicall3Address: (env.MULTICALL3_ADDRESS || undefined) as `0x${string}` | undefined,
   signalRetentionDays: env.SIGNAL_RETENTION_DAYS,
   snapshotRetentionDays: env.SNAPSHOT_RETENTION_DAYS,
   logScanChunkBlocks: BigInt(env.LOG_SCAN_CHUNK_BLOCKS),

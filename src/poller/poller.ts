@@ -1,5 +1,14 @@
 import { config } from "../core/config.js";
-import { runDiscoveryCycle, runMonitoringCycle, runRetentionCycle } from "../monitoring/monitoringService.js";
+import { runDiscoveryCycle, runMonitoringCycle, runRetentionCycle, rpcBackoff } from "../monitoring/monitoringService.js";
+
+function logPauseStarted(): void {
+  const s = rpcBackoff.state(Math.floor(Date.now() / 1000));
+  if (!s.paused || s.resumeAt === null) return;
+  console.warn(
+    `RPC ${s.lastReason} — pausing all chain reads until ${new Date(s.resumeAt * 1000).toISOString()} ` +
+      `(pause #${s.consecutiveRateLimits}). Tokens are not penalized; checks resume automatically.`
+  );
+}
 
 let monitoringRunning = false;
 let discoveryRunning = false;
@@ -56,6 +65,7 @@ async function runDiscoveryTick(): Promise<void> {
   discoveryRunning = true;
   try {
     const result = await runDiscoveryCycle();
+    if (result.rateLimitStarted) logPauseStarted();
     if (result.discovered > 0 || result.skippedCapacity > 0) {
       console.log(`Discovery: scanned ${result.scanned}, added ${result.discovered} new, skipped ${result.skippedCapacity} (queue at capacity).`);
     }
@@ -73,8 +83,13 @@ async function runMonitoringTick(): Promise<void> {
   monitoringRunning = true;
   try {
     const result = await runMonitoringCycle();
+    if (result.rateLimitStarted) logPauseStarted();
+    if (result.reactivated > 0) {
+      console.log(`Monitoring: reactivated ${result.reactivated} FAILED token(s) after cool-off.`);
+    }
     if (result.checked > 0) {
-      console.log(`Monitoring: checked ${result.checked} (${result.succeeded} ok, ${result.failed} failed), peak concurrency ${result.maxConcurrencyObserved}.`);
+      const limited = result.rateLimited > 0 ? `, ${result.rateLimited} rate-limited (rescheduled, not counted)` : "";
+      console.log(`Monitoring: checked ${result.checked} (${result.succeeded} ok, ${result.failed} failed${limited}), peak concurrency ${result.maxConcurrencyObserved}.`);
     }
   } finally {
     monitoringRunning = false;

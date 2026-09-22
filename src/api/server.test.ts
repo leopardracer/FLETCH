@@ -71,6 +71,15 @@ test("REGRESSION: buildHealthResponse (the exact function GET /api/health calls)
   assert.equal(typeof parsed.chain.blockNumber, "string");
 });
 
+test("buildHealthResponse surfaces the RPC backoff state when given one — so a paused poller is visible, not silent", () => {
+  const response = buildHealthResponse({ ok: false, reason: "HTTP request failed." }, false, true, {
+    paused: true, resumeAt: 1_700_003_600, consecutiveRateLimits: 1, lastReason: "provider daily request quota reached",
+  });
+  assert.equal(response.rpcBackoff?.paused, true);
+  assert.equal(response.rpcBackoff?.lastReason, "provider daily request quota reached");
+  assert.equal("rpcBackoff" in buildHealthResponse({ ok: false, reason: "x" }, false, false), false);
+});
+
 test("REGRESSION: buildHealthResponse still reports a real failure normally — the fix didn't change the ok:false shape", () => {
   const response = buildHealthResponse({ ok: false, reason: "RPC_URL is not set in .env" }, false, false);
   assert.equal(response.ok, false);

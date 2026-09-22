@@ -23,6 +23,7 @@ import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
 import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
+import { rpcBackoff, type RpcBackoffState } from "../core/rpcBackoff.js";
 import { rephraseSummary } from "../ai/rephrase.js";
 import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
 
@@ -36,8 +37,19 @@ const provider = new RpcChainDataProvider();
  * branch — see api/server.test.ts for exactly this test). This is the
  * literal function the real handler calls, not a re-implementation.
  */
-export function buildHealthResponse(chain: ChainPingResult, blockscoutConfigured: boolean, pollerEnabled: boolean) {
-  return { ok: chain.ok, chain: bigIntSafe(chain), blockscoutConfigured, pollerEnabled };
+export function buildHealthResponse(
+  chain: ChainPingResult,
+  blockscoutConfigured: boolean,
+  pollerEnabled: boolean,
+  rpcBackoffState?: RpcBackoffState
+) {
+  return {
+    ok: chain.ok,
+    chain: bigIntSafe(chain),
+    blockscoutConfigured,
+    pollerEnabled,
+    ...(rpcBackoffState ? { rpcBackoff: rpcBackoffState } : {}),
+  };
 }
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
@@ -112,7 +124,7 @@ export function createServer(options?: { rateLimit?: { windowMs: number; limit: 
 
   app.get("/api/health", asyncRoute(async (_req, res) => {
     const chain = await pingChain();
-    res.json(buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller));
+    res.json(buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller, rpcBackoff.state(Math.floor(Date.now() / 1000))));
   }));
 
   // Is FLETCH actually watching the chain right now? See

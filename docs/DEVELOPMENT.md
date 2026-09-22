@@ -33,7 +33,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/health` | chain connectivity, Blockscout/poller config state |
+| `GET /api/health` | chain connectivity, Blockscout/poller config state, RPC rate-limit backoff (`rpcBackoff`) |
 | `GET /api/monitoring` | is FLETCH actually watching the chain right now — queue counts, recent activity, no secrets (see [docs/MONITORING.md](./MONITORING.md)) |
 | `GET /api/tokens?window=<blocks>` | Tokens feed — new launches ranked by FLETCH Score |
 | `GET /api/radar?window=<seconds>&limit=<n>` | Meme Radar — tokens ranked by recency-weighted signal convergence, not size (see [docs/RADAR.md](./RADAR.md)) |
@@ -42,7 +42,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | `GET /api/tokens/:address/history` | persisted snapshot history for that token |
 | `GET /api/tokens/:address/signals` | signal timeline for that token |
 | `GET /api/tokens/:address/wallets` | wallet activity for that token (per-token scope) |
-| `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized PnL + win rate from price-at-trade; the rest explicit NOT_YET_IMPLEMENTED |
+| `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized/unrealized PnL, win rate and early-entry timing from price-at-trade; average holding period still NOT_YET_IMPLEMENTED |
 
 ## Environment variables
 
@@ -141,7 +141,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 npm run test:coverage
 ```
 
-85.40% line coverage / 86.31% branch / 68.15% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
+86.37% line coverage / 87.43% branch / 70.81% function, on real application code — test files are excluded from the number via `--test-coverage-exclude="**/*.test.js"`. Not chasing 100%: the coverage that matters is on the code that computes something, not the code that calls an external service.
 
 | Area | Line coverage | Why |
 |---|---|---|
@@ -172,6 +172,6 @@ Roughly in priority order:
 4. ~~Record price-at-trade per wallet~~ — **done**: `wallet_trades` + `wallets/positions.ts` (see [DATA.md](./DATA.md#smart-money)).
 5. Decide on and wire a social data source, or keep it explicitly unavailable long-term.
 6. Wallet-clustering detection off existing transfer data.
-7. Batch the feed endpoint's per-launch RPC calls via multicall.
-8. Automatic reactivation of a `FAILED` monitored token after a longer cool-off, instead of requiring a process restart (see [MONITORING.md](./MONITORING.md)).
+7. ~~Batch per-launch RPC calls via multicall~~ — **done, opt-in** via a verified `MULTICALL3_ADDRESS` (see [MONITORING.md](./MONITORING.md)).
+8. ~~Automatic reactivation of a `FAILED` monitored token~~ — **done**, together with RPC rate-limit backoff (see [MONITORING.md](./MONITORING.md)).
 9. A real DETECTED→STRENGTHENING→FADING signal lifecycle, if the simpler existing per-snapshot dedup turns out not to be enough in practice.

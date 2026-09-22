@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { useInMemoryDbForTests } from "../persistence/db.js";
 import { recordWalletActivity } from "../persistence/walletActivityStore.js";
 import { recordCurveScan } from "../persistence/walletTradesStore.js";
+import { recordSnapshot } from "../persistence/snapshots.js";
 import { getWalletIntelligence } from "./walletScore.js";
+import type { TokenMetrics } from "../data/types.js";
+import type { FletchScore } from "../scoring/fletchScore.js";
 
 const WALLET = "0xcccccccccccccccccccccccccccccccccccccccc" as const;
 const TOKEN = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
@@ -14,7 +17,7 @@ beforeEach(() => {
   useInMemoryDbForTests();
 });
 
-const STILL_NOT_IMPLEMENTED = ["earlyEntryTiming", "unrealizedPnl", "averageHoldingPeriod"] as const;
+const STILL_NOT_IMPLEMENTED = ["averageHoldingPeriod"] as const;
 
 test("metrics that still lack real data stay NOT_YET_IMPLEMENTED with a stated reason — never a computed number", () => {
   const intel = getWalletIntelligence(WALLET);
@@ -99,4 +102,83 @@ test("the wallet address on the response is normalized to lowercase, consistent 
   const mixedCase = "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" as const;
   const intel = getWalletIntelligence(mixedCase);
   assert.equal(intel.wallet, mixedCase.toLowerCase());
+});
+
+// ---------- unrealized PnL + early entry ----------
+
+function snapshotMetrics(priceInPair: number | null, graduated: boolean | null): TokenMetrics {
+  return {
+    priceInPair, liquidityPairAsset: 5, liquidityUsd: 10_000, holderCount: 50, holderCountIsLifetime: true,
+    buyCountWindow: 1, sellCountWindow: 0, volumePairAssetWindow: 1, topHolderConcentrationPercent: 20, whaleMoves: [], graduated,
+  };
+}
+const SCORE: FletchScore = {
+  overall: 50,
+  components: {
+    momentum: { value: 50, label: "" }, smartMoney: { value: null, label: "", reason: "unavailable" },
+    social: { value: null, label: "", reason: "unavailable" }, liquidity: { value: 50, label: "" },
+    holderGrowth: { value: 50, label: "" }, whaleActivity: { value: 50, label: "" }, safety: { value: 50, label: "" },
+  },
+  weightsUsed: {},
+};
+
+function openPositionOn(token: `0x${string}`, buyBlock = 110) {
+  recordCurveScan(token, 100, 100, 300, [
+    { wallet: WALLET, txHash: `0x${token.slice(-4)}01`, logIndex: 0, blockNumber: buyBlock, side: "buy", tokenAmount: 1000, quoteAmount: 1 },
+  ]);
+}
+
+test("an open position on a live curve is valued at the latest curve price: held × price − cost", () => {
+  openPositionOn(TOKEN);
+  recordSnapshot(TOKEN, snapshotMetrics(0.003, false), SCORE, "LOW", NOW);
+  const intel = getWalletIntelligence(WALLET, NOW + 60);
+  assert.equal(intel.metrics.unrealizedPnl.availability, "REAL");
+  assert.ok(Math.abs(intel.metrics.unrealizedPnl.value! - 2) < 1e-9); // 1000 × 0.003 − 1
+  assert.equal(intel.metrics.unrealizedPnl.unit, "ETH");
+});
+
+test("a graduated token's open position is NOT valued with a stale curve price", () => {
+  openPositionOn(TOKEN);
+  recordSnapshot(TOKEN, snapshotMetrics(0.003, true), SCORE, "LOW", NOW);
+  assert.equal(getWalletIntelligence(WALLET, NOW + 60).metrics.unrealizedPnl.availability, "UNAVAILABLE");
+});
+
+test("a curve price older than 24h isn't used", () => {
+  openPositionOn(TOKEN);
+  recordSnapshot(TOKEN, snapshotMetrics(0.003, false), SCORE, "LOW", NOW);
+  assert.equal(getWalletIntelligence(WALLET, NOW + 25 * 3600).metrics.unrealizedPnl.availability, "UNAVAILABLE");
+});
+
+test("a gap between scans makes the holding itself uncertain — no unrealized PnL", () => {
+  openPositionOn(TOKEN);
+  recordCurveScan(TOKEN, 100, 500, 600, []); // blocks 301-499 never scanned
+  recordSnapshot(TOKEN, snapshotMetrics(0.003, false), SCORE, "LOW", NOW);
+  assert.equal(getWalletIntelligence(WALLET, NOW + 60).metrics.unrealizedPnl.availability, "UNAVAILABLE");
+});
+
+test("if ANY open position can't be valued, no partial total is shown", () => {
+  openPositionOn(TOKEN);
+  openPositionOn(TOKEN_B);
+  recordSnapshot(TOKEN, snapshotMetrics(0.003, false), SCORE, "LOW", NOW);
+  // TOKEN_B has no snapshot at all
+  const m = getWalletIntelligence(WALLET, NOW + 60).metrics.unrealizedPnl;
+  assert.equal(m.availability, "UNAVAILABLE");
+  assert.equal(m.value, undefined);
+  assert.match(m.reason!, /1 of 2/);
+});
+
+test("early entry timing is the median blocks from launch to first buy", () => {
+  openPositionOn(TOKEN, 105); // 5 blocks after launch 100
+  openPositionOn(TOKEN_B, 125); // 25 blocks after
+  const m = getWalletIntelligence(WALLET, NOW).metrics.earlyEntryTiming;
+  assert.equal(m.availability, "REAL");
+  assert.equal(m.value, 15);
+  assert.match(m.unit!, /blocks/);
+});
+
+test("early entry is UNAVAILABLE when FLETCH never saw a token from launch", () => {
+  recordCurveScan(TOKEN, 100, 5000, 9000, [
+    { wallet: WALLET, txHash: "0x01", logIndex: 0, blockNumber: 6000, side: "buy", tokenAmount: 1000, quoteAmount: 1 },
+  ]);
+  assert.equal(getWalletIntelligence(WALLET, NOW).metrics.earlyEntryTiming.availability, "UNAVAILABLE");
 });

@@ -8,6 +8,9 @@ export const robinhoodChain = defineChain({
   rpcUrls: {
     default: { http: [] }, // intentionally empty — RPC_URL is required explicitly
   },
+  // Only declared when MULTICALL3_ADDRESS is set and verified by the operator —
+  // see core/config.ts. Never assumed from another chain's canonical address.
+  ...(config.multicall3Address ? { contracts: { multicall3: { address: config.multicall3Address } } } : {}),
 });
 
 let _client: ReturnType<typeof createPublicClient> | null = null;
@@ -17,6 +20,9 @@ export function getClient() {
   _client = createPublicClient({
     chain: robinhoodChain,
     transport: http(config.requireRpcUrl()),
+    // With a verified Multicall3, viem aggregates concurrent readContract
+    // calls into one eth_call (e.g. chain/token.ts's 4 metadata reads → 1).
+    ...(config.multicall3Address ? { batch: { multicall: true } } : {}),
   });
   return _client;
 }

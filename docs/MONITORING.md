@@ -44,7 +44,9 @@ The signal and risk engines need launch-moment facts (curve address for whale cl
 
 `runMonitoringCycle()` pulls whatever's due (`next_check_at <= now`, ordered by priority) and processes it with **bounded concurrency** (`MAX_CONCURRENT_TOKENS` in flight at once, regardless of how many are queued) via a small manual worker pool — no new dependency. Every check goes through `signals/signalService.ts`'s existing `analyzeAndPersist()` — **the same function the API and token pages already call** — so there is exactly one place signal semantics live, not a second parallel signal system inside the monitor.
 
-**On failure, nothing about the token's real metrics is ever written.** Only the monitoring queue's own metadata changes: `failure_count` increments, `last_error` records the real error message, and the next attempt is scheduled at the normal retry interval. A token failing `MAX_CONSECUTIVE_FAILURES` times in a row (default 5) is marked `FAILED` and **stops being scheduled entirely** — this is what stops a single permanently-broken address (a self-destructed contract, a malformed response) from retrying forever and wasting RPC calls on every cycle. A working check afterward would reset this, but nothing currently reactivates a `FAILED` token automatically — that's a deliberate simplification, not an oversight; see "Not built in this pass."
+**On failure, nothing about the token's real metrics is ever written.** Only the monitoring queue's own metadata changes: `failure_count` increments, `last_error` records the real error message, and the next attempt is scheduled at the normal retry interval. A token failing `MAX_CONSECUTIVE_FAILURES` times in a row (default 5) is marked `FAILED` and **stops being scheduled entirely** — this is what stops a single permanently-broken address (a self-destructed contract, a malformed response) from retrying forever and wasting RPC calls on every cycle. Every monitoring cycle also runs `reactivateFailed()`: a `FAILED` token that has sat out `FAILED_REACTIVATE_AFTER_SECONDS` (default 6h) since its last check goes back to `ACTIVE` with a fresh failure budget — so a stretch of real failures doesn't leave tokens dead until a restart, while a genuinely broken address still costs at most `MAX_CONSECUTIVE_FAILURES` checks per cool-off window.
+
+**Rate limits are not token failures.** Found in live use: when the RPC provider ran out of quota (HTTP 429, then QuickNode's "daily request limit reached"), every cycle kept firing a full batch at a dead provider, and every one of those errors counted against a perfectly healthy token. `core/rpcBackoff.ts` now tells the two apart. A rate-limit error opens a circuit breaker: the rest of the batch isn't started, the token is rescheduled for when the pause ends with **no** failure count or `last_error` change, and both cycles skip chain reads until then. The pause starts at `RPC_BACKOFF_BASE_MS` and doubles per consecutive rate limit up to `RPC_BACKOFF_MAX_MS`; a daily-quota error goes straight to the maximum. Any successful read resets it. The poller logs one line per pause (not one per request), and `GET /api/health` reports it as `rpcBackoff`.
 
 One broken token in a batch never stops the rest — each check's failure is caught independently inside the worker pool.
 
@@ -121,6 +123,9 @@ All in `.env.example`, all with bounded, conservative defaults so a misconfigura
 | `MAX_CONCURRENT_TOKENS` | 5 | in-flight chain reads per monitoring cycle |
 | `MAX_MONITORED_TOKENS` | 500 | hard cap on the queue itself |
 | `MAX_CONSECUTIVE_FAILURES` | 5 | checks before a token is marked FAILED and stops being scheduled |
+| `FAILED_REACTIVATE_AFTER_SECONDS` | 21600 (6h) | cool-off before a FAILED token gets a fresh retry budget; 0 disables |
+| `RPC_BACKOFF_BASE_MS` / `RPC_BACKOFF_MAX_MS` | 60000 / 3600000 | first pause after an RPC rate limit (doubling) and its ceiling |
+| `MULTICALL3_ADDRESS` | unset | optional, operator-verified Multicall3 — aggregates concurrent contract reads into one `eth_call` |
 | `SIGNAL_RETENTION_DAYS` / `SNAPSHOT_RETENTION_DAYS` | 30 / 30 | how long history is kept before `runRetentionCycle()` prunes it |
 
 `POLL_INTERVAL_MS` / `POLL_TOKEN_LIMIT` / `ENABLE_POLLER` (pre-existing) still govern the check cadence and the master on/off switch.
@@ -148,7 +153,5 @@ FLETCH is read-only. Nothing in this monitoring layer signs a transaction, holds
 **Real:** everything above — discovery, the monitoring queue, bounded concurrency, priority scheduling, failure tracking with a hard stop, phase tracking, the phase-transition guard, retention pruning, and the `/api/monitoring` counts.
 
 **Not built in this pass:**
-- Automatic reactivation of a `FAILED` token (needs a manual `PAUSED`→`ACTIVE` path or a longer cool-off retry — not implemented; a permanently-failed token stays failed until the process restarts and re-discovers it, or a future admin action reactivates it).
 - The DETECTED→STRENGTHENING→FADING→RESOLVED signal lifecycle (see above — the simpler existing dedup mechanism already satisfies the hard requirement).
-- True acceleration baselines (same pre-existing limitation as `ACTIVITY_ACCELERATION` — see `SIGNALS.md`).
 - Verified support beyond ~1,000 tokens (see "Performance & scale" above).

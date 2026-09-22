@@ -13,6 +13,8 @@ import {
   recordCheckSuccess,
   recordCheckFailure,
   countMonitored,
+  rescheduleWithoutPenalty,
+  reactivateFailed,
   type MonitoredToken,
   type MonitoringPriority,
   type Phase,
@@ -20,6 +22,9 @@ import {
 import type { TokenMetrics } from "../data/types.js";
 import type { SmartMoneyReport } from "../wallets/smartMoney.js";
 import type { SocialReport } from "../social/social.js";
+import { RpcBackoff, isRpcRateLimitError, rpcBackoff } from "../core/rpcBackoff.js";
+
+export { rpcBackoff };
 
 /**
  * Everything the monitoring cycles need from the outside world, injected
@@ -46,6 +51,10 @@ export interface DiscoveryResult {
   scanned: number;
   discovered: number;
   skippedCapacity: number;
+  /** True when the scan didn't run (or was cut short) because RPC reads are paused. */
+  paused: boolean;
+  /** True when this call is the one that hit the rate limit and started the pause. */
+  rateLimitStarted: boolean;
 }
 
 /**
@@ -55,8 +64,21 @@ export interface DiscoveryResult {
  * known launch is a cheap no-op (see upsertDiscovered) — this can run as
  * often as DISCOVERY_INTERVAL_MS without duplicating work.
  */
-export async function runDiscoveryCycle(deps: MonitoringDeps = defaultDeps, now: number = Math.floor(Date.now() / 1000)): Promise<DiscoveryResult> {
-  const launches = await deps.scanLaunches();
+export async function runDiscoveryCycle(
+  deps: MonitoringDeps = defaultDeps,
+  now: number = Math.floor(Date.now() / 1000),
+  backoff: RpcBackoff = rpcBackoff
+): Promise<DiscoveryResult> {
+  if (backoff.isPaused(now)) return { scanned: 0, discovered: 0, skippedCapacity: 0, paused: true, rateLimitStarted: false };
+  let launches: DetectedLaunch[];
+  try {
+    launches = await deps.scanLaunches();
+  } catch (e: unknown) {
+    if (!isRpcRateLimitError(e)) throw e;
+    const started = backoff.recordRateLimit(now, e);
+    return { scanned: 0, discovered: 0, skippedCapacity: 0, paused: true, rateLimitStarted: started };
+  }
+  backoff.recordSuccess();
   let discovered = 0;
   let skippedCapacity = 0;
 
@@ -70,7 +92,7 @@ export async function runDiscoveryCycle(deps: MonitoringDeps = defaultDeps, now:
     if (upsertDiscovered(launch.token, now, "HIGH", launch)) discovered++;
   }
 
-  return { scanned: launches.length, discovered, skippedCapacity };
+  return { scanned: launches.length, discovered, skippedCapacity, paused: false, rateLimitStarted: false };
 }
 
 export interface MonitoringCycleResult {
@@ -78,6 +100,14 @@ export interface MonitoringCycleResult {
   succeeded: number;
   failed: number;
   maxConcurrencyObserved: number;
+  /** Checks cut short by an RPC rate limit — rescheduled, never counted as token failures. */
+  rateLimited: number;
+  /** Due checks not started because RPC reads were paused — left untouched, still due. */
+  skippedPaused: number;
+  /** FAILED tokens given a fresh set of retries after their cool-off this cycle. */
+  reactivated: number;
+  /** True when a rate limit during this cycle started a new pause. */
+  rateLimitStarted: boolean;
 }
 
 /**
@@ -92,13 +122,26 @@ export async function runMonitoringCycle(
   deps: MonitoringDeps = defaultDeps,
   now: number = Math.floor(Date.now() / 1000),
   concurrency: number = config.maxConcurrentTokens,
-  batchSize: number = config.maxConcurrentTokens * 4
+  batchSize: number = config.maxConcurrentTokens * 4,
+  backoff: RpcBackoff = rpcBackoff
 ): Promise<MonitoringCycleResult> {
+  const reactivated = reactivateFailed(now, config.failedReactivateAfterSeconds);
+  if (backoff.isPaused(now)) {
+    return { checked: 0, succeeded: 0, failed: 0, maxConcurrencyObserved: 0, rateLimited: 0, skippedPaused: 0, reactivated, rateLimitStarted: false };
+  }
   const due = getDueForCheck(now, batchSize);
   let succeeded = 0;
   let failed = 0;
+  let rateLimited = 0;
+  let skippedPaused = 0;
+  let rateLimitStarted = false;
 
   const { maxConcurrencyObserved } = await runWithConcurrencyLimit(due, concurrency, async (item) => {
+    // Once any check in this batch hits the provider's limit, don't start more.
+    if (backoff.isPaused(now)) {
+      skippedPaused++;
+      return;
+    }
     try {
       const metrics = await deps.getMetrics(item.token as `0x${string}`);
       const [smartMoney, social] = await Promise.all([deps.getSmartMoney(item.token as `0x${string}`), deps.getSocial(item.token as `0x${string}`)]);
@@ -107,8 +150,15 @@ export async function runMonitoringCycle(
       const phase: Phase | null = metrics.graduated === null ? null : metrics.graduated ? "GRADUATED" : "CURVE";
       const priority = computeNextPriority(item, now);
       recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority), priority);
+      backoff.recordSuccess();
       succeeded++;
     } catch (e: unknown) {
+      if (isRpcRateLimitError(e)) {
+        if (backoff.recordRateLimit(now, e)) rateLimitStarted = true;
+        rescheduleWithoutPenalty(item.token as `0x${string}`, backoff.resumeAt, now);
+        rateLimited++;
+        return;
+      }
       const message =
         typeof e === "object" && e !== null && "message" in e && typeof (e as { message: unknown }).message === "string"
           ? (e as { message: string }).message
@@ -118,7 +168,16 @@ export async function runMonitoringCycle(
     }
   });
 
-  return { checked: due.length, succeeded, failed, maxConcurrencyObserved };
+  return {
+    checked: due.length - skippedPaused,
+    succeeded,
+    failed,
+    maxConcurrencyObserved,
+    rateLimited,
+    skippedPaused,
+    reactivated,
+    rateLimitStarted,
+  };
 }
 
 /**
