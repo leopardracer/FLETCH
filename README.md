@@ -30,7 +30,7 @@ FLETCH is **not** a token screener, a trading bot, or a price predictor. There i
 
 **Using it** — [Architecture](#architecture) · [Quick Start](#quick-start) · [Live Data](#live-data) · [Demo](#demo)
 
-**Contributing** — [Tests](#tests) · [Development](#development) · [Roadmap](#roadmap) · [Built on](#built-on) · [License](#license)
+**Contributing** — [Tests](#tests) · [Development](#development) · [Roadmap](#roadmap) · [Community kit](#community-kit) · [Built on](#built-on) · [License](#license)
 
 </details>
 
@@ -273,6 +273,33 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 9. ~~A real DETECTED→STRENGTHENING→FADING signal lifecycle~~ — **done**, derived at read time, on Radar and every token
 
 </details>
+
+## Community kit
+
+Free FLETCH PFPs and stickers — use them anywhere: your avatar, replies on X, Telegram or Discord packs, slides. PFPs are 1000×1000 PNG; stickers are 800×800 PNG with transparent backgrounds.
+
+<p align="center">
+  <img src="./site/brand/pfp/fletch-pfp-classic.png" width="96" alt="FLETCH PFP: classic">
+  <img src="./site/brand/pfp/fletch-pfp-king.png" width="96" alt="FLETCH PFP: king">
+  <img src="./site/brand/pfp/fletch-pfp-dj.png" width="96" alt="FLETCH PFP: dj">
+  <img src="./site/brand/pfp/fletch-pfp-party.png" width="96" alt="FLETCH PFP: party">
+  <img src="./site/brand/pfp/fletch-pfp-laser.png" width="96" alt="FLETCH PFP: laser">
+  <img src="./site/brand/pfp/fletch-pfp-detective.png" width="96" alt="FLETCH PFP: detective">
+  <img src="./site/brand/pfp/fletch-pfp-sniper.png" width="96" alt="FLETCH PFP: sniper">
+  <img src="./site/brand/pfp/fletch-pfp-night.png" width="96" alt="FLETCH PFP: night">
+</p>
+<p align="center">
+  <img src="./site/brand/stickers/fletch-stk-gm.png" width="96" alt="FLETCH sticker: gm">
+  <img src="./site/brand/stickers/fletch-stk-snipers.png" width="96" alt="FLETCH sticker: snipers">
+  <img src="./site/brand/stickers/fletch-stk-hopium.png" width="96" alt="FLETCH sticker: hopium">
+  <img src="./site/brand/stickers/fletch-stk-caught.png" width="96" alt="FLETCH sticker: caught">
+  <img src="./site/brand/stickers/fletch-stk-chains.png" width="96" alt="FLETCH sticker: chains">
+  <img src="./site/brand/stickers/fletch-stk-nfa.png" width="96" alt="FLETCH sticker: nfa">
+  <img src="./site/brand/stickers/fletch-stk-public.png" width="96" alt="FLETCH sticker: public">
+  <img src="./site/brand/stickers/fletch-stk-readonly.png" width="96" alt="FLETCH sticker: readonly">
+</p>
+
+**[Download the full kit (.zip)](./site/brand/fletch-community-kit.zip)** · individual files in [`site/brand/`](./site/brand/) · also on [getfletch.xyz](https://getfletch.xyz/#community).
 
 ## Built on
 
