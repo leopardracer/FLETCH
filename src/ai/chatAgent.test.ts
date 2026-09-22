@@ -75,6 +75,28 @@ function toolUseMessage(id: string, name: string, input: Record<string, unknown>
   return { content: [{ type: "tool_use", id, name, input }] } as unknown as Anthropic.Message;
 }
 
+test("if a tool's real call throws (RPC timeout, DB error, etc.), the turn degrades to a tool_result.error instead of crashing", async () => {
+  const deps = fakeDeps({
+    getRadar: async () => {
+      throw new Error("RPC request timed out");
+    },
+  });
+  const calls: unknown[] = [];
+  const client = scriptedClient(
+    [toolUseMessage("t1", "get_radar", {}), textMessage("FLETCH couldn't reach the chain just now — try again shortly.")],
+    calls
+  );
+  const result = await runChatAgent([{ role: "user", content: "show me the radar" }], deps, client);
+
+  assert.equal(result.reply, "FLETCH couldn't reach the chain just now — try again shortly.");
+
+  const secondCallMessages = (calls[1] as { messages: Array<{ content: unknown }> }).messages;
+  const toolResultMsg = secondCallMessages[secondCallMessages.length - 1];
+  const toolResultContent = (toolResultMsg.content as Array<{ content: string }>)[0].content;
+  const parsed = JSON.parse(toolResultContent) as { error?: string };
+  assert.match(parsed.error ?? "", /get_radar failed.*RPC request timed out/);
+});
+
 test("with no client configured, returns the disabled message and makes zero tool calls", async () => {
   const result = await runChatAgent([{ role: "user", content: "hi" }], fakeDeps(), null);
   assert.match(result.reply, /ANTHROPIC_API_KEY/);

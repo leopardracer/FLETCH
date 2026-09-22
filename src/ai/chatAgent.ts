@@ -7,6 +7,7 @@ import { getTokenIntel, type TokenIntel } from "../intel/tokenIntel.js";
 import { getWalletIntelligence, type WalletIntelligence } from "../wallets/walletScore.js";
 import { getRadar, type RadarEntry } from "../radar/radarService.js";
 import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
+import { errorMessage } from "../api/jsonSafe.js";
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
@@ -85,28 +86,38 @@ Rules, no exceptions:
 `.trim();
 
 async function executeTool(name: string, input: Record<string, unknown>, deps: AgentDeps): Promise<unknown> {
-  switch (name) {
-    case "get_token_report": {
-      const raw = String(input.address ?? "");
-      if (!ADDRESS_RE.test(raw)) return { error: `"${raw}" isn't a valid Robinhood Chain address (expected 0x + 40 hex chars).` };
-      const address = raw.toLowerCase() as `0x${string}`;
-      const info = await deps.readTokenInfo(address).catch(() => null);
-      if (!info || !info.contractExists) return { error: `No contract found at ${address} on Robinhood Chain.` };
-      return deps.getTokenIntel(address, info, deps.provider);
+  try {
+    switch (name) {
+      case "get_token_report": {
+        const raw = String(input.address ?? "");
+        if (!ADDRESS_RE.test(raw)) return { error: `"${raw}" isn't a valid Robinhood Chain address (expected 0x + 40 hex chars).` };
+        const address = raw.toLowerCase() as `0x${string}`;
+        const info = await deps.readTokenInfo(address).catch(() => null);
+        if (!info || !info.contractExists) return { error: `No contract found at ${address} on Robinhood Chain.` };
+        return await deps.getTokenIntel(address, info, deps.provider);
+      }
+      case "get_wallet_report": {
+        const raw = String(input.address ?? "");
+        if (!ADDRESS_RE.test(raw)) return { error: `"${raw}" isn't a valid Robinhood Chain address (expected 0x + 40 hex chars).` };
+        return deps.getWalletIntelligence(raw.toLowerCase() as `0x${string}`);
+      }
+      case "get_radar": {
+        const windowSeconds = typeof input.windowSeconds === "number" ? input.windowSeconds : undefined;
+        const limit = typeof input.limit === "number" ? Math.max(1, Math.min(25, input.limit)) : 15;
+        const radar = await deps.getRadar(windowSeconds);
+        return radar.slice(0, limit);
+      }
+      default:
+        return { error: `Unknown tool: ${name}` };
     }
-    case "get_wallet_report": {
-      const raw = String(input.address ?? "");
-      if (!ADDRESS_RE.test(raw)) return { error: `"${raw}" isn't a valid Robinhood Chain address (expected 0x + 40 hex chars).` };
-      return deps.getWalletIntelligence(raw.toLowerCase() as `0x${string}`);
-    }
-    case "get_radar": {
-      const windowSeconds = typeof input.windowSeconds === "number" ? input.windowSeconds : undefined;
-      const limit = typeof input.limit === "number" ? Math.max(1, Math.min(25, input.limit)) : 15;
-      const radar = await deps.getRadar(windowSeconds);
-      return radar.slice(0, limit);
-    }
-    default:
-      return { error: `Unknown tool: ${name}` };
+  } catch (e) {
+    // A real chain/DB failure mid-conversation (RPC timeout, rate limit,
+    // transient outage) must never crash the whole chat turn — same
+    // "degrade, don't throw" rule as the Anthropic API call itself
+    // (see the try/catch around client.messages.create above). The
+    // model already knows how to report a tool_result.error honestly
+    // (SYSTEM_PROMPT's UNAVAILABLE-handling rule covers this shape too).
+    return { error: `${name} failed: ${errorMessage(e)}` };
   }
 }
 
