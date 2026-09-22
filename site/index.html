@@ -161,7 +161,7 @@
         <a href="https://github.com/leopardracer/FLETCH/tree/main/docs" class="btn-ghost">Read the Docs <span class="flow-arrow">→</span></a>
       </div>
       <div class="fade-in-5" style="font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);">
-        Not a token screener. Not a trading bot. Not an AI chatbot. Not a price predictor.
+        Not a token screener. Not a trading bot. Not a price predictor. Read-only, always.
       </div>
     </div>
 
@@ -432,7 +432,7 @@
 
   <!-- 7. SIGNALS / RISK / FLETCH SCORE -->
   <div id="modules" style="max-width:1240px;margin:0 auto;padding:var(--section-pad) clamp(20px,5vw,48px);">
-    <div class="label" style="margin-bottom:28px;">Signals, Risk, Score</div>
+    <div class="label" style="margin-bottom:28px;">Signals, Risk, Score, AI</div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px;">
 
@@ -466,6 +466,16 @@
           <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">SAFETY</span>
         </div>
         <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/SCORING.md" style="font-family:var(--mono);font-size:11.5px;color:var(--pink);text-decoration:none;">docs/SCORING.md <span class="flow-arrow">→</span></a>
+      </div>
+
+      <div class="card" style="padding:26px;">
+        <div style="font-family:var(--mono);font-weight:700;font-size:14px;color:var(--data);margin-bottom:14px;">D · AI LAYER</div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin-bottom:18px;">Optional, off by default. Rephrases what FLETCH already found, or answers questions by calling FLETCH's own real functions as tools — never given raw chain data to reason from.</div>
+        <div style="font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+          <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">SUMMARY · opt-in</span>
+          <span class="chip" style="border-color:var(--line);color:var(--ink-dim);">CHAT AGENT</span>
+        </div>
+        <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" style="font-family:var(--mono);font-size:11.5px;color:var(--pink);text-decoration:none;">docs/AI.md <span class="flow-arrow">→</span></a>
       </div>
 
     </div>
@@ -633,7 +643,7 @@
       </div>
       <div style="padding:20px 0;">
         <div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;"><span>Does FLETCH use AI to predict prices?</span><span class="faq-plus">+</span></div>
-        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);">No. Explanations are templated from real computed numbers, never a free-form model touching raw chain data — and FLETCH never predicts what happens next.</div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);">No. Every signal and risk finding is still templated from real computed numbers, never a free-form model touching raw chain data — and FLETCH never predicts what happens next. An optional AI layer exists (off by default) for two narrower jobs: rephrasing FLETCH's own findings into plain English, and a read-only chat agent that answers by calling FLETCH's real functions as tools. Neither is given raw chain data to reason from, and neither can trade. <a href="https://github.com/leopardracer/FLETCH/blob/main/docs/AI.md" style="color:var(--pink);text-decoration:none;">docs/AI.md</a></div>
       </div>
     </div>
   </div>
@@ -655,7 +665,18 @@
         </div>
         <span class="chip chip-low" style="flex:none;">DONE</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Discovery, risk, score, radar and continuous monitoring — reading Robinhood Chain directly. 221 tests, 83% line coverage, open source, MIT.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Discovery, risk, score, radar and continuous monitoring — reading Robinhood Chain directly. 235 tests, 84% line coverage, open source, MIT.</p>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--data);padding:16px 20px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">ADDED</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--data);">AI LAYER — OPTIONAL</div>
+        </div>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">A rephrase of FLETCH's own findings into plain English, and a read-only chat agent restricted to FLETCH's real functions as tools — neither is ever given raw chain data to reason from. Off by default. docs/AI.md</p>
     </div>
 
     <div class="card" style="padding:16px 20px;margin-bottom:10px;">
