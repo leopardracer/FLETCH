@@ -146,6 +146,19 @@ test("get_radar caps the limit at 25 regardless of what the model asks for", asy
   assert.equal(radarPayload.length, 25);
 });
 
+test("if the Anthropic API call itself fails (bad key, rate limit, network), degrades gracefully instead of throwing", async () => {
+  const client = {
+    messages: {
+      create: async () => {
+        throw new Error("401 authentication_error: API key is invalid.");
+      },
+    },
+  } as unknown as Anthropic;
+  const result = await runChatAgent([{ role: "user", content: "hello" }], fakeDeps(), client);
+  assert.match(result.reply, /isn't reachable/);
+  assert.equal(result.toolCalls.length, 0);
+});
+
 test("stops after maxTurns and returns the graceful giving-up message instead of looping forever", async () => {
   const client = scriptedClient([toolUseMessage("t1", "get_radar", {})]); // always returns tool_use — scriptedClient repeats the last one
   const result = await runChatAgent([{ role: "user", content: "loop forever" }], fakeDeps(), client, 3);

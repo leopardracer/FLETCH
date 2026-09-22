@@ -144,13 +144,26 @@ export async function runChatAgent(
   const toolCallLog: Array<{ name: string; input: unknown }> = [];
 
   for (let turn = 0; turn < maxTurns; turn++) {
-    const res = await client.messages.create({
-      model: config.anthropicModel,
-      max_tokens: 700,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS,
-      messages: conversation,
-    });
+    let res: Anthropic.Message;
+    try {
+      res = await client.messages.create({
+        model: config.anthropicModel,
+        max_tokens: 700,
+        system: SYSTEM_PROMPT,
+        tools: TOOLS,
+        messages: conversation,
+      });
+    } catch {
+      // Bad/expired key, rate limit, or a transient Anthropic-side issue —
+      // never leak the SDK's raw error (or a bare 500) to the caller; same
+      // "degrade, don't throw" rule rephrase.ts follows for this exact
+      // class of failure. Any tool calls already made this turn are still
+      // reported back via toolCallLog.
+      return {
+        reply: "The AI chat service isn't reachable right now — check ANTHROPIC_API_KEY and try again shortly.",
+        toolCalls: toolCallLog,
+      };
+    }
 
     const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
 
