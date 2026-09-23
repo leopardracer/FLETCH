@@ -24,7 +24,7 @@ import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
 import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
-import { rpcBackoff, type RpcBackoffState } from "../core/rpcBackoff.js";
+import { rpcBackoff, isRpcRateLimitError, type RpcBackoffState } from "../core/rpcBackoff.js";
 import { rephraseSummary, rephraseFacts } from "../ai/rephrase.js";
 import { buildMarketBrief, type MarketBrief } from "../ai/brief.js";
 import { buildWalletFacts } from "../ai/walletExplain.js";
@@ -82,10 +82,34 @@ function asyncRoute(
 ): express.RequestHandler {
   return (req, res) => {
     handler(req, res).catch((e: unknown) => {
+      // Found live on the public RPC: a provider rate limit surfaced as a
+      // generic 500, indistinguishable from a real bug. It's a temporary,
+      // retryable condition — say so, with a Retry-After.
+      if (isRpcRateLimitError(e)) {
+        res.status(503).set("Retry-After", "30").json({ error: "The chain RPC is rate-limiting FLETCH right now — try again in a moment.", retryable: true });
+        return;
+      }
       res.status(500).json({ error: errorMessage(e) });
     });
   };
 }
+
+/** Runs `fn` over `items` with at most `limit` in flight — keeps a burst of chain reads under an RPC's rate limit. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/** How long the live token feed (GET /api/tokens) is reused before re-reading the chain. */
+const FEED_CACHE_SECONDS = 90;
 
 /** How long a computed market brief is reused before the radar/signal feed is re-read. */
 const BRIEF_CACHE_SECONDS = 120;
@@ -133,6 +157,7 @@ export function createServer(options?: {
   // Per-instance caches (never module-global, so tests stay isolated).
   let briefCache: { at: number; brief: MarketBrief } | null = null;
   const whyCache = new Map<string, { at: number; why: WhyIsItMoving }>();
+  const feedCache = new Map<string, { at: number; body: unknown }>();
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const webDir = path.resolve(__dirname, "../../web");
@@ -184,11 +209,21 @@ export function createServer(options?: {
   // Early Signals feed — new tokens, scored.
   app.get("/api/tokens", asyncRoute(async (req, res) => {
     const windowBlocks = req.query.window ? BigInt(String(req.query.window)) : undefined;
+    // Found live: 50 tokens × full live metrics took 193s on the public RPC.
+    // The feed now reads 20 tokens live and is cached for FEED_CACHE_SECONDS,
+    // so a busy page never re-triggers hundreds of chain reads.
+    const cacheKey = String(windowBlocks ?? "default");
+    const cached = feedCache.get(cacheKey);
+    if (cached && Date.now() / 1000 - cached.at < FEED_CACHE_SECONDS) {
+      res.json(cached.body);
+      return;
+    }
     const launches = await scanRecentLaunches(windowBlocks);
-    const limited = launches.slice(0, 50); // cap: full metrics per token is several RPC round-trips
+    const limited = launches.slice(0, 20); // cap: full metrics per token is several RPC round-trips
 
-    const rows = await Promise.all(
-      limited.map(async (launch) => {
+    // 3 at a time, not all at once: firing every token's reads in parallel is
+    // what tripped the public RPC's rate limit and left all 50 rows unscored.
+    const rows = await mapLimit(limited, 3, async (launch) => {
         const metrics = await provider.getTokenMetrics(launch.token).catch(() => null);
         const smartMoney = await getSmartMoneyForToken(launch.token);
         const social = await getSocialSignalForToken(launch.token);
@@ -205,11 +240,12 @@ export function createServer(options?: {
           fletchScore: analysis?.score.overall ?? null,
           topSignal: analysis ? pickTopSignal(analysis.signals) : null,
         };
-      })
-    );
+      });
 
     rows.sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1));
-    res.json({ count: rows.length, tokens: rows });
+    const body = { count: rows.length, tokens: rows, cachedForSeconds: FEED_CACHE_SECONDS };
+    feedCache.set(cacheKey, { at: Date.now() / 1000, body });
+    res.json(body);
   }));
 
   // Chain-wide live signal feed — events worth attention, not a token list.

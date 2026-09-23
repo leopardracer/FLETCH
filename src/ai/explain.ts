@@ -29,7 +29,33 @@ export function explainWhyItsMoving(signals: Signal[], risk: RiskReport): WhyIsI
     .filter((s) => !RISK_SIGNAL_TYPES.has(s.type))
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
 
-  const bullets = movementSignals.map((s) => `${s.explanation} (${s.evidence})`);
+  // Found on real data: one busy token produced 43 near-identical whale
+  // bullets. Repeated whale buys/sells are rolled into one line each (count,
+  // total, largest with its tx) so the explanation stays readable and the
+  // AI rephrase gets the facts, not a wall of duplicates. Capped at 8 lines.
+  const bullets: string[] = [];
+  const agg = new Map<string, Signal[]>();
+  const slot = new Map<string, number>(); // keeps each rolled-up line where its most severe signal ranked
+  for (const s of movementSignals) {
+    if (s.type === "WHALE_BUY_FROM_CURVE" || s.type === "WHALE_SELL_TO_CURVE" || s.type === "WHALE_TRANSFER") {
+      if (!agg.has(s.type)) { agg.set(s.type, []); slot.set(s.type, bullets.length); bullets.push(""); }
+      agg.get(s.type)!.push(s);
+    } else bullets.push(`${s.explanation} (${s.evidence})`);
+  }
+  const label: Record<string, [string, string]> = {
+    WHALE_BUY_FROM_CURVE: ["large buy(s) came directly off the bonding curve", "bought"],
+    WHALE_SELL_TO_CURVE: ["large sell(s) went directly into the bonding curve", "sold"],
+    WHALE_TRANSFER: ["large wallet-to-wallet transfer(s) — direction/intent isn't inferred from these alone", "moved"],
+  };
+  for (const [type, list] of agg) {
+    const at = slot.get(type)!;
+    if (list.length === 1) { bullets[at] = `${list[0].explanation} (${list[0].evidence})`; continue; }
+    const amt = (s: Signal) => Number((s.evidence.match(/^([\d,]+)/)?.[1] ?? "0").replace(/,/g, ""));
+    const total = list.reduce((a, s) => a + amt(s), 0);
+    const biggest = list.reduce((a, s) => (amt(s) > amt(a) ? s : a), list[0]);
+    bullets[at] = `${list.length} ${label[type][0]}, ${total.toLocaleString("en-US")} tokens ${label[type][1]} in total (largest: ${biggest.evidence}).`;
+  }
+  bullets.splice(8);
   if (bullets.length === 0) {
     bullets.push("Unavailable — not enough signal data yet to explain recent movement.");
   }

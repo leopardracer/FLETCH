@@ -63,41 +63,104 @@ export async function readHolderStats(
     config.logScanChunkBlocks
   );
 
-  const balance = new Map<string, bigint>();
-  const netChange = new Map<string, bigint>();
-  const whaleMoves: HolderStats["whaleMoves"] = [];
-  const threshold = BigInt(Math.floor(whaleThresholdTokens)) * 10n ** BigInt(decimals);
+  const core = computeHolderCore(
+    logs.map((l) => ({ ...(l.args as { from: string; to: string; value: bigint }), txHash: l.transactionHash!, blockNumber: l.blockNumber! })),
+    decimals,
+    whaleThresholdTokens,
+    launch.found ? launch.curve : null,
+    top
+  );
+  const { holderCount, topAccumulators, whaleMoves } = core;
+  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves };
+}
 
-  for (const log of logs) {
-    const { from, to, value } = log.args as { from: string; to: string; value: bigint };
-    balance.set(from, (balance.get(from) ?? 0n) - value);
-    balance.set(to, (balance.get(to) ?? 0n) + value);
-    netChange.set(from, (netChange.get(from) ?? 0n) - value);
-    netChange.set(to, (netChange.get(to) ?? 0n) + value);
+export interface RawTransfer { from: string; to: string; value: bigint; txHash: string; blockNumber: bigint }
 
-    if (value >= threshold) {
-      whaleMoves.push({
-        from,
-        to,
-        amount: Number(formatUnits(value, decimals)),
-        txHash: log.transactionHash!,
-        blockNumber: log.blockNumber!.toString(),
-      });
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+/**
+ * The pure part of readHolderStats — replays Transfer logs into holders,
+ * accumulators and whale moves. Three rules found against real Robinhood
+ * Chain data (token WALS, Sep 2026) that the first version got wrong:
+ *
+ *  1. The token's own bonding CURVE holds the unsold supply. It was being
+ *     counted as a holder — so a token everyone had sold back showed
+ *     "1 holder, top 10 own 100%" (a false CRITICAL) and the curve topped
+ *     the wallet list. The curve and the zero address are never holders.
+ *  2. The mint (from the zero address into the curve) was reported as a
+ *     "1,000,000,000 tokens sold into the curve" whale sell. Mints and burns
+ *     aren't trades — they're never whale moves.
+ *  3. Many sells go wallet → intermediary contract → curve inside ONE tx
+ *     (and buys curve → intermediary → wallet). That produced a spurious
+ *     "wallet-to-wallet transfer" for every trade. An address that receives
+ *     and forwards the exact same amount within one tx is a pass-through:
+ *     the chain is collapsed into a single move from the real sender to the
+ *     real receiver, and the pass-through is never a holder.
+ */
+export function computeHolderCore(
+  transfers: RawTransfer[],
+  decimals: number,
+  whaleThresholdTokens: number,
+  curve: string | null,
+  top = 10
+): Pick<HolderStats, "holderCount" | "topAccumulators" | "whaleMoves"> {
+  const excluded = new Set<string>([...PROTOCOL_SET, ZERO]);
+  if (curve) excluded.add(curve.toLowerCase());
+
+  // 3. find pass-throughs per tx: in == out within the tx, both non-zero
+  const byTx = new Map<string, RawTransfer[]>();
+  for (const t of transfers) (byTx.get(t.txHash) ?? byTx.set(t.txHash, []).get(t.txHash)!).push(t);
+  const passThrough = new Set<string>(); // "tx|address"
+  const collapsed: RawTransfer[] = [];
+  for (const [tx, list] of byTx) {
+    const inAmt = new Map<string, bigint>(), outAmt = new Map<string, bigint>();
+    for (const t of list) {
+      const f = t.from.toLowerCase(), to = t.to.toLowerCase();
+      outAmt.set(f, (outAmt.get(f) ?? 0n) + t.value);
+      inAmt.set(to, (inAmt.get(to) ?? 0n) + t.value);
+    }
+    const pts = new Set<string>();
+    for (const [addr, amt] of inAmt) if (addr !== ZERO && !excluded.has(addr) && outAmt.get(addr) === amt && amt > 0n) pts.add(addr);
+    pts.forEach((a) => passThrough.add(tx + "|" + a));
+    // collapse A -> X -> B chains (same amount) into A -> B for whale purposes
+    const used = new Set<RawTransfer>();
+    for (const t of list) {
+      if (used.has(t)) continue;
+      const to = t.to.toLowerCase();
+      if (pts.has(to)) {
+        const next = list.find((u) => !used.has(u) && u !== t && u.from.toLowerCase() === to && u.value === t.value);
+        if (next) { used.add(t); used.add(next); collapsed.push({ ...t, to: next.to }); continue; }
+      }
+      if (pts.has(t.from.toLowerCase())) { const prev = list.find((u) => u.to.toLowerCase() === t.from.toLowerCase() && u.value === t.value); if (prev && used.has(prev)) continue; }
+      used.add(t); collapsed.push(t);
     }
   }
 
-  let holderCount = 0;
-  for (const [address, bal] of balance) {
-    if (bal > 0n && !PROTOCOL_SET.has(address.toLowerCase())) holderCount++;
+  const balance = new Map<string, bigint>();
+  const netChange = new Map<string, bigint>();
+  for (const t of transfers) {
+    balance.set(t.from.toLowerCase(), (balance.get(t.from.toLowerCase()) ?? 0n) - t.value);
+    balance.set(t.to.toLowerCase(), (balance.get(t.to.toLowerCase()) ?? 0n) + t.value);
+    netChange.set(t.from.toLowerCase(), (netChange.get(t.from.toLowerCase()) ?? 0n) - t.value);
+    netChange.set(t.to.toLowerCase(), (netChange.get(t.to.toLowerCase()) ?? 0n) + t.value);
   }
+  const isPass = (addr: string) => [...passThrough].some((k) => k.endsWith("|" + addr));
+
+  let holderCount = 0;
+  for (const [address, bal] of balance) if (bal > 0n && !excluded.has(address) && !isPass(address)) holderCount++;
 
   const topAccumulators = [...netChange.entries()]
-    .filter(([address]) => !PROTOCOL_SET.has(address.toLowerCase()))
-    .sort((a, b) => (b[1] > a[1] ? 1 : -1))
+    .filter(([address, ch]) => !excluded.has(address) && ch !== 0n)
+    .sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))
     .slice(0, top)
     .map(([address, change]) => ({ address, netChange: Number(formatUnits(change, decimals)) }));
 
-  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves };
+  const threshold = BigInt(Math.floor(whaleThresholdTokens)) * 10n ** BigInt(decimals);
+  const whaleMoves: HolderStats["whaleMoves"] = collapsed
+    .filter((t) => t.value >= threshold && t.from.toLowerCase() !== ZERO && t.to.toLowerCase() !== ZERO)
+    .map((t) => ({ from: t.from, to: t.to, amount: Number(formatUnits(t.value, decimals)), txHash: t.txHash, blockNumber: t.blockNumber.toString() }));
+
+  return { holderCount, topAccumulators, whaleMoves };
 }
 
 /** Concentration of the top N accumulators as a % of total positive balance seen — used by risk analysis. */

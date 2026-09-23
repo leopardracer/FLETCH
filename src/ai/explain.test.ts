@@ -80,3 +80,18 @@ test("insufficientData is true only when there are zero movement signals, regard
   const withMovement = explainWhyItsMoving([signal({ type: "BUY_PRESSURE" })], CLEAN_RISK);
   assert.equal(withMovement.insufficientData, false);
 });
+
+test("REGRESSION (WALS): dozens of whale moves roll up into one line per kind, with count, total and the largest tx", () => {
+  const whales = Array.from({ length: 13 }, (_, i) =>
+    signal({ type: "WHALE_BUY_FROM_CURVE", severity: "MEDIUM", explanation: "A large buy came directly off the bonding curve.", evidence: `${(i + 1) * 1_000_000 === 13_000_000 ? "64,796,259" : ((i + 1) * 1_000_000).toLocaleString("en-US")} tokens bought from the curve in tx 0x${i}` })
+  );
+  const why = explainWhyItsMoving(whales, CLEAN_RISK);
+  assert.equal(why.bullets.length, 1);
+  assert.match(why.bullets[0], /^13 large buy\(s\) came directly off the bonding curve/);
+  assert.match(why.bullets[0], /largest: 64,796,259 tokens bought from the curve in tx 0x12/);
+});
+
+test("never more than 8 bullets, however noisy the token", () => {
+  const many = Array.from({ length: 20 }, (_, i) => signal({ type: "PRICE_UP", severity: "LOW", explanation: `x${i}`, evidence: "e" }));
+  assert.equal(explainWhyItsMoving(many, CLEAN_RISK).bullets.length, 8);
+});
