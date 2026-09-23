@@ -56,3 +56,35 @@ test("args that match neither event shape decode to null", () => {
     null
   );
 });
+
+// ---------- attribution by token flow (real shapes: WALS, Sep 2026) ----------
+import { attributeByTokenFlow } from "./curveTrades.js";
+import { computeHolderCore } from "./holders.js";
+
+const CURVE = "0xd5cf30ea17cb90584f8cf7f4b882e555a64230bc";
+const MIDDLE = "0x65050a9b7e5075a2ba5ced7b1b64ee66262c40dc"; // credited with 115 of 1,147 trades before the fix
+const BUYER = "0x4f44ef3fc60d4a81426fea2756cb892277852fbd";
+const WEI = 10n ** 18n;
+
+test("REGRESSION: a buy routed curve → intermediary → buyer is credited to the BUYER, not the intermediary", () => {
+  const core = computeHolderCore([{ from: CURVE, to: MIDDLE, value: 1_117_101n * WEI, txHash: "0xb1", blockNumber: 1n },
+                                  { from: MIDDLE, to: BUYER, value: 1_117_101n * WEI, txHash: "0xb1", blockNumber: 1n }], 18, 1e12, CURVE);
+  const [t] = attributeByTokenFlow([{ wallet: MIDDLE as `0x${string}`, txHash: "0xb1", logIndex: 0, blockNumber: 1, side: "buy", tokenAmount: 1_117_101, quoteAmount: 0.01 }], core.flows!, CURVE);
+  assert.equal(t.wallet.toLowerCase(), BUYER);
+});
+
+test("REGRESSION: a sell routed seller → intermediary → curve is credited to the SELLER", () => {
+  const core = computeHolderCore([{ from: BUYER, to: MIDDLE, value: 1_117_101n * WEI, txHash: "0xs1", blockNumber: 2n },
+                                  { from: MIDDLE, to: CURVE, value: 1_117_101n * WEI, txHash: "0xs1", blockNumber: 2n }], 18, 1e12, CURVE);
+  const [t] = attributeByTokenFlow([{ wallet: MIDDLE as `0x${string}`, txHash: "0xs1", logIndex: 0, blockNumber: 2, side: "sell", tokenAmount: 1_117_101, quoteAmount: 0.009 }], core.flows!, CURVE);
+  assert.equal(t.wallet.toLowerCase(), BUYER);
+});
+
+test("a direct trade keeps its recipient; an ambiguous flow keeps the event's recipient rather than guessing", () => {
+  const direct = attributeByTokenFlow([{ wallet: BUYER as `0x${string}`, txHash: "0xd", logIndex: 0, blockNumber: 3, side: "buy", tokenAmount: 10, quoteAmount: 1 }],
+    [{ from: CURVE, to: BUYER, amount: 10, txHash: "0xd" }], CURVE);
+  assert.equal(direct[0].wallet, BUYER);
+  const ambiguous = attributeByTokenFlow([{ wallet: MIDDLE as `0x${string}`, txHash: "0xa", logIndex: 0, blockNumber: 4, side: "buy", tokenAmount: 10, quoteAmount: 1 }],
+    [{ from: CURVE, to: "0x" + "1".repeat(40), amount: 7, txHash: "0xa" }, { from: CURVE, to: "0x" + "2".repeat(40), amount: 8, txHash: "0xa" }], CURVE);
+  assert.equal(ambiguous[0].wallet, MIDDLE);
+});

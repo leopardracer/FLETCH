@@ -16,6 +16,8 @@ export interface HolderStats {
   holderCount: number;
   topAccumulators: { address: string; netChange: number }[];
   whaleMoves: { from: string; to: string; amount: number; txHash: string; blockNumber: string }[];
+  /** Every token movement after pass-throughs are collapsed (real sender → real receiver), for trade attribution. */
+  flows?: { from: string; to: string; amount: number; txHash: string }[];
 }
 
 const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase()));
@@ -70,8 +72,8 @@ export async function readHolderStats(
     launch.found ? launch.curve : null,
     top
   );
-  const { holderCount, topAccumulators, whaleMoves } = core;
-  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves };
+  const { holderCount, topAccumulators, whaleMoves, flows } = core;
+  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves, flows };
 }
 
 export interface RawTransfer { from: string; to: string; value: bigint; txHash: string; blockNumber: bigint }
@@ -103,7 +105,7 @@ export function computeHolderCore(
   whaleThresholdTokens: number,
   curve: string | null,
   top = 10
-): Pick<HolderStats, "holderCount" | "topAccumulators" | "whaleMoves"> {
+): Pick<HolderStats, "holderCount" | "topAccumulators" | "whaleMoves" | "flows"> {
   const excluded = new Set<string>([...PROTOCOL_SET, ZERO]);
   if (curve) excluded.add(curve.toLowerCase());
 
@@ -160,7 +162,8 @@ export function computeHolderCore(
     .filter((t) => t.value >= threshold && t.from.toLowerCase() !== ZERO && t.to.toLowerCase() !== ZERO)
     .map((t) => ({ from: t.from, to: t.to, amount: Number(formatUnits(t.value, decimals)), txHash: t.txHash, blockNumber: t.blockNumber.toString() }));
 
-  return { holderCount, topAccumulators, whaleMoves };
+  const flows = collapsed.map((t) => ({ from: t.from, to: t.to, amount: Number(formatUnits(t.value, decimals)), txHash: t.txHash }));
+  return { holderCount, topAccumulators, whaleMoves, flows };
 }
 
 /** Concentration of the top N accumulators as a % of total positive balance seen — used by risk analysis. */

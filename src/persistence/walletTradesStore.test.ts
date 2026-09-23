@@ -80,3 +80,11 @@ test("a zero-token trade is never stored", () => {
   recordCurveScan(TOKEN, 100, 100, 200, [trade({ tokenAmount: 0 })]);
   assert.equal(getTradesForWallet(WALLET).length, 0);
 });
+
+test("REGRESSION: re-scanning a trade with better attribution corrects its wallet instead of keeping the intermediary", () => {
+  const MIDDLE = "0x6505000000000000000000000000000000000000" as const;
+  recordCurveScan(TOKEN, 100, 100, 200, [trade({ wallet: MIDDLE })]);
+  recordCurveScan(TOKEN, 100, 100, 200, [trade({ wallet: WALLET })]);
+  assert.equal(getTradesForWallet(MIDDLE).length, 0);
+  assert.equal(getTradesForWallet(WALLET).length, 1);
+});

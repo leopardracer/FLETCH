@@ -6,7 +6,7 @@ import { NATIVE_ETH, curveAbi } from "./pons.js";
 import { config } from "../core/config.js";
 import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
 import { decodeCurveTrade } from "./curveTrades.js";
-import { recordCurveScan } from "../persistence/walletTradesStore.js";
+import type { CurveTrade } from "../persistence/walletTradesStore.js";
 
 export interface LiquidityInfo {
   hasPool: boolean;
@@ -21,6 +21,18 @@ export interface LiquidityInfo {
    *  chain/launch.ts's CurveState). Never guessed either way. */
   graduated?: boolean | null;
   usdUnavailableReason?: string;
+  /** The curve trades this read already fetched (native-ETH pairs only), for
+   *  the caller to attribute to real wallets and record — see rpcProvider. */
+  tradeScan?: TradeScan;
+}
+
+export interface TradeScan {
+  token: `0x${string}`;
+  curve: `0x${string}`;
+  launchBlock: number;
+  fromBlock: number;
+  toBlock: number;
+  trades: CurveTrade[];
 }
 
 /**
@@ -74,7 +86,7 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
     liquidityPairAsset = Number(formatUnits(balance, 18));
   }
 
-  const priceInPair = await lastTradePrice(launch);
+  const { price: priceInPair, scan: tradeScan } = await lastTradePrice(launch);
   const usdPrice = await getPairAssetUsdPrice();
   const liquidityUsd = liquidityPairAsset !== null && usdPrice !== null ? liquidityPairAsset * usdPrice : null;
 
@@ -87,6 +99,7 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
     liquidityPairAsset,
     liquidityUsd,
     graduated: curve.graduated,
+    tradeScan,
     usdUnavailableReason:
       liquidityPairAsset === null
         ? "pair asset is not native ETH — ERC-20 quote-asset balance reading isn't implemented yet"
@@ -106,7 +119,7 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
  * launches, so every recorded amount is in one known unit. A persistence
  * failure is logged and never breaks the price read itself.
  */
-async function lastTradePrice(launch: LaunchRecord): Promise<number | null> {
+async function lastTradePrice(launch: LaunchRecord): Promise<{ price: number | null; scan?: TradeScan }> {
   const client = getClient();
   const latest = await client.getBlockNumber();
   const { fromBlock } = boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks);
@@ -125,19 +138,14 @@ async function lastTradePrice(launch: LaunchRecord): Promise<number | null> {
     ),
   ]);
 
+  let scan: TradeScan | undefined;
   if (launch.pairToken.toLowerCase() === NATIVE_ETH) {
-    try {
-      const trades = [...buys, ...sells]
-        .map((l) => decodeCurveTrade(l))
-        .filter((t): t is NonNullable<typeof t> => t !== null);
-      recordCurveScan(launch.token, Number(launch.launchBlock), Number(fromBlock), Number(latest), trades);
-    } catch (e) {
-      console.warn(`Recording curve trades for ${launch.token} failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    const trades = [...buys, ...sells].map((l) => decodeCurveTrade(l)).filter((t): t is NonNullable<typeof t> => t !== null);
+    scan = { token: launch.token, curve: launch.curve, launchBlock: Number(launch.launchBlock), fromBlock: Number(fromBlock), toBlock: Number(latest), trades };
   }
 
   const all = [...buys, ...sells].sort((a, b) => Number(b.blockNumber! - a.blockNumber!));
-  if (all.length === 0) return null;
+  if (all.length === 0) return { price: null, scan };
   const last = decodeCurveTrade(all[0]);
-  return last ? last.quoteAmount / last.tokenAmount : null;
+  return { price: last ? last.quoteAmount / last.tokenAmount : null, scan };
 }

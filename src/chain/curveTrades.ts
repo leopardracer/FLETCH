@@ -50,3 +50,38 @@ export function decodeCurveTrade(log: CurveLogLike, tokenDecimals = 18, quoteDec
   }
   return null;
 }
+
+/**
+ * Re-attributes curve trades to the wallet the tokens actually reached (buy)
+ * or came from (sell), using the token's own Transfer flow in the same tx
+ * with pass-through contracts already collapsed (chain/holders.ts).
+ *
+ * Found live: one intermediary contract (0x6505…) was credited with 115 of
+ * 1,147 recorded trades, because the curve event's `recipient` is whatever
+ * contract called it, not the person. Those wallets' own positions came up
+ * empty. A buy now goes to the final token receiver; a sell to the original
+ * token sender. When the flow doesn't identify one wallet unambiguously, the
+ * event's recipient is kept — never a guess.
+ */
+export function attributeByTokenFlow(
+  trades: CurveTrade[],
+  flows: { from: string; to: string; amount: number; txHash: string }[],
+  curve: string
+): CurveTrade[] {
+  const c = curve.toLowerCase();
+  const byTx = new Map<string, typeof flows>();
+  for (const f of flows) (byTx.get(f.txHash.toLowerCase()) ?? byTx.set(f.txHash.toLowerCase(), []).get(f.txHash.toLowerCase())!).push(f);
+  const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(1e-6, Math.abs(b) * 1e-6);
+  return trades.map((t) => {
+    const fl = byTx.get(t.txHash.toLowerCase()) ?? [];
+    const cands =
+      t.side === "buy"
+        ? fl.filter((f) => f.from.toLowerCase() === c && f.to.toLowerCase() !== c)
+        : fl.filter((f) => f.to.toLowerCase() === c && f.from.toLowerCase() !== c);
+    const exact = cands.filter((f) => close(f.amount, t.tokenAmount));
+    const pick = exact.length === 1 ? exact[0] : cands.length === 1 ? cands[0] : null;
+    if (!pick) return t;
+    const wallet = (t.side === "buy" ? pick.to : pick.from) as `0x${string}`;
+    return wallet.toLowerCase() === t.wallet.toLowerCase() ? t : { ...t, wallet };
+  });
+}

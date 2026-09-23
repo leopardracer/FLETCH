@@ -52,9 +52,12 @@ export function recordCurveScan(
 ): void {
   const db = getDb();
   const insert = db.prepare(
-    `INSERT OR IGNORE INTO wallet_trades
+    // A re-scan of the same trade updates only its wallet — so trades first
+    // credited to an intermediary get corrected once attribution improves.
+    `INSERT INTO wallet_trades
        (wallet, token, tx_hash, log_index, block_number, side, token_amount, quote_amount, price_in_pair)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(tx_hash, log_index) DO UPDATE SET wallet = excluded.wallet`
   );
   db.exec("BEGIN");
   try {

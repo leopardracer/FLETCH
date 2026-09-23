@@ -1,3 +1,5 @@
+import { attributeByTokenFlow } from "../../chain/curveTrades.js";
+import { recordCurveScan } from "../../persistence/walletTradesStore.js";
 import { formatUnits } from "viem";
 import { getClient } from "../../chain/client.js";
 import { scanRecentLaunches } from "../../chain/hunt.js";
@@ -76,6 +78,19 @@ export class RpcChainDataProvider implements ChainDataProvider {
       readLiquidity(address),
       readHolderStats(address, decimals).catch(() => null),
     ]);
+
+    // Record the curve trades liquidity already fetched, attributed to real
+    // wallets by the token flow the holder scan already fetched. Never blocks
+    // the metrics read.
+    if (liquidity.tradeScan) {
+      const s = liquidity.tradeScan;
+      try {
+        const trades = holders?.flows ? attributeByTokenFlow(s.trades, holders.flows, s.curve) : s.trades;
+        recordCurveScan(s.token, s.launchBlock, s.fromBlock, s.toBlock, trades);
+      } catch (e) {
+        console.warn(`Recording curve trades for ${s.token} failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
 
     let buyCountWindow = 0;
     let sellCountWindow = 0;
