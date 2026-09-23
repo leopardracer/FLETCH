@@ -385,3 +385,21 @@ test("GET /api/tokens hides DEAD launches from the feed and says how many", asyn
   assert.equal(body.tokens.some((t: { symbol: string }) => t.symbol === "DEADCAT"), false);
   assert.ok(body.deadHidden >= 1);
 });
+
+
+test("GET /api/search: empty query, text query and full address — answered from stored data, no chain call", async () => {
+  let r = await fetch(`${baseUrl}/api/search`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { query: "", kind: "empty", results: [] });
+
+  r = await fetch(`${baseUrl}/api/search?q=${encodeURIComponent("$wals")}`);
+  let b = await r.json();
+  assert.equal(b.kind, "text");
+  assert.deepEqual(b.results, []);
+
+  const addr = "0x" + "ab".repeat(20);
+  r = await fetch(`${baseUrl}/api/search?q=${addr}`);
+  b = await r.json();
+  assert.equal(b.kind, "address");
+  assert.equal(b.isToken, false, "an address FLETCH has never seen as a token → the client treats it as a wallet");
+});

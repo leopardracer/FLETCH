@@ -19,6 +19,14 @@
         <span class="tagline">What's happening on Robinhood Chain, why, and whether to care.</span>
       </span>
     </a>
+    <div class="search" id="search" role="search">
+      <svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.6-3.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search-input" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Search $ticker, name or 0x address" aria-label="Search tokens and wallets"
+             aria-controls="search-results" aria-expanded="false" aria-autocomplete="list" />
+      <kbd class="search-kbd" aria-hidden="true">/</kbd>
+      <div class="search-results" id="search-results" role="listbox" hidden></div>
+    </div>
     <div class="status" id="status">
       <span class="pip" id="status-pip"></span>
       <span id="status-text">connecting…</span>

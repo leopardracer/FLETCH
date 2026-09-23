@@ -1254,3 +1254,104 @@ function initMascot() {
     }, 9000);
   }
 }
+
+
+/* ================= header search =================
+ * Symbol, name or address. Answered by /api/search from what FLETCH has
+ * already stored — no chain call, so it's instant. A full 0x address that
+ * isn't a known token opens as a wallet. Symbols/names are deployer-chosen
+ * text, so every result goes through esc().
+ */
+function initSearch() {
+  const box = document.getElementById("search");
+  const input = document.getElementById("search-input");
+  const list = document.getElementById("search-results");
+  if (!box || !input || !list) return;
+  const FULL_ADDR = /^0x[0-9a-fA-F]{40}$/;
+  let items = [];      // [{ label, hash }]
+  let active = -1;
+  let seq = 0;
+  let timer = null;
+
+  function close() { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; }
+  function open() { list.hidden = false; input.setAttribute("aria-expanded", "true"); }
+  function go(hash) { close(); input.blur(); input.value = ""; location.hash = hash; }
+  function mark() {
+    [...list.querySelectorAll(".sr")].forEach((el, i) => el.classList.toggle("on", i === active));
+    const el = list.querySelector(".sr.on"); if (el) el.scrollIntoView({ block: "nearest" });
+  }
+
+  function render(body, q) {
+    const rows = [];
+    items = [];
+    for (const r of body.results || []) {
+      const sym = r.symbol ? `$${esc(r.symbol)}` : fmtAddr(r.token);
+      const name = r.name ? `<span class="sr-name">${esc(r.name)}</span>` : "";
+      const meta = [];
+      if (r.dead) meta.push(`<span class="sr-dead">DEAD</span>`);
+      else {
+        if (r.riskLevel) meta.push(`<span class="sr-risk r-${esc(String(r.riskLevel).toLowerCase())}">${esc(r.riskLevel)}</span>`);
+        if (r.score !== null && r.score !== undefined) meta.push(`<span class="sr-score">${Math.round(r.score)}</span>`);
+      }
+      items.push({ hash: `#/token/${r.token}` });
+      rows.push(`<div class="sr" role="option" data-i="${items.length - 1}"><div class="sr-main"><div class="sr-line"><b>${sym}</b><span class="sr-addr">${fmtAddr(r.token)}</span></div>${name}</div><div class="sr-meta">${meta.join("")}</div></div>`);
+    }
+    if (body.kind === "address" && !body.isToken) {
+      items.push({ hash: `#/wallet/${q}` });
+      rows.push(`<div class="sr" role="option" data-i="${items.length - 1}"><div class="sr-main"><div class="sr-line"><b>Wallet</b><span class="sr-addr">${fmtAddr(q)}</span></div></div><div class="sr-meta"><span class="sr-go">open →</span></div></div>`);
+    }
+    if (!rows.length) {
+      list.innerHTML = `<div class="sr-empty">No token FLETCH has seen matches “${esc(q)}”.<br><span>Paste a full 0x address to open any token or wallet.</span></div>`;
+    } else {
+      list.innerHTML = rows.join("");
+    }
+    active = items.length ? 0 : -1;
+    mark();
+    open();
+  }
+
+  async function run() {
+    const q = input.value.trim();
+    if (!q) { close(); return; }
+    const my = ++seq;
+    try {
+      const body = await getJSON(`/api/search?q=${encodeURIComponent(q)}`);
+      if (my !== seq) return; // a newer keystroke already answered
+      render(body, q);
+    } catch {
+      if (my !== seq) return;
+      list.innerHTML = `<div class="sr-empty">Search is unavailable right now.</div>`;
+      open();
+    }
+  }
+
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 140); });
+  input.addEventListener("focus", () => { if (input.value.trim()) run(); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" && items.length) { e.preventDefault(); active = (active + 1) % items.length; mark(); }
+    else if (e.key === "ArrowUp" && items.length) { e.preventDefault(); active = (active - 1 + items.length) % items.length; mark(); }
+    else if (e.key === "Escape") { close(); input.blur(); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (active >= 0 && items[active]) go(items[active].hash);
+      else if (FULL_ADDR.test(q)) go(`#/token/${q}`);
+    }
+  });
+  list.addEventListener("mousedown", (e) => {
+    const row = e.target.closest(".sr");
+    if (!row) return;
+    e.preventDefault(); // keep focus until navigation
+    go(items[Number(row.dataset.i)].hash);
+  });
+  input.addEventListener("blur", () => setTimeout(close, 120));
+  // "/" focuses search from anywhere (unless already typing somewhere)
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    e.preventDefault();
+    input.focus();
+  });
+}
+initSearch();

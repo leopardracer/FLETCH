@@ -32,6 +32,7 @@ import { buildMarketBrief, type MarketBrief } from "../ai/brief.js";
 import { buildWalletFacts } from "../ai/walletExplain.js";
 import type { WhyIsItMoving } from "../ai/explain.js";
 import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
+import { searchTokens, isKnownToken, isFullAddress } from "../persistence/searchStore.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -325,6 +326,23 @@ export function createServer(options?: {
   // radar/radarEngine.ts and docs/RADAR.md. Entirely persistence-driven
   // (no live chain scan needed to rank); only symbol/name resolution
   // touches the chain client, best-effort.
+  // Header search: symbol, name or address — answered from stored data only,
+  // never an RPC call. A full address FLETCH doesn't know as a token is
+  // most likely a wallet; the response says which, and the client routes.
+  app.get("/api/search", (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 64) : "";
+    if (!q) {
+      res.json({ query: "", kind: "empty", results: [] });
+      return;
+    }
+    const results = searchTokens(q, 8);
+    if (isFullAddress(q)) {
+      res.json({ query: q, kind: "address", isToken: isKnownToken(q), results });
+      return;
+    }
+    res.json({ query: q, kind: "text", results });
+  });
+
   app.get("/api/radar", asyncRoute(async (req, res) => {
     const windowSeconds = req.query.window ? Math.max(60, Number(req.query.window)) : RADAR_WINDOW_SECONDS_DEFAULT;
     const limit = req.query.limit ? Math.min(100, Number(req.query.limit)) : 25;

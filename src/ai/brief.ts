@@ -48,6 +48,25 @@ const READABLE: Partial<Record<SignalType, string>> = {
   PHASE_CHANGE: "graduations off the curve",
 };
 
+/**
+ * A HOLDER_CONCENTRATION signal on a token with fewer than 10 holders says
+ * "only N holders so far", not "the supply is concentrated" — and rows
+ * written before that fix say "top 10 holders own 100%", which with under
+ * 10 holders is arithmetic, not a finding. Either way the brief must not
+ * report it as concentration or count it as HIGH/CRITICAL.
+ */
+export function isFewHoldersSignal(s: { type: string; evidence?: string | null }): boolean {
+  if (s.type !== "HOLDER_CONCENTRATION") return false;
+  const ev = s.evidence ?? "";
+  return /^only \d+ holders? so far/.test(ev) || /\bown 100% of tracked supply\b/.test(ev);
+}
+
+/** What a signal is called in the brief — HOLDER_CONCENTRATION splits by meaning. */
+function readableLabel(s: { type: SignalType; evidence?: string | null }): string {
+  if (isFewHoldersSignal(s)) return "tokens with very few holders yet";
+  return READABLE[s.type] ?? s.type;
+}
+
 export function shortAddress(a: string): string {
   return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 }
@@ -69,14 +88,17 @@ export function buildMarketBriefFacts(input: MarketBriefInput): string[] {
   const tokens = new Set(inWindow.map((s) => s.token));
   facts.push(`In the last ${minutes} minutes FLETCH recorded ${inWindow.length} on-chain signal(s) across ${tokens.size} token(s); ${input.monitoredTokens} token(s) are being monitored.`);
 
-  const byType = new Map<SignalType, number>();
-  for (const s of inWindow) byType.set(s.type, (byType.get(s.type) ?? 0) + 1);
-  const topTypes = [...byType.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const byLabel = new Map<string, number>();
+  for (const s of inWindow) {
+    const label = readableLabel(s);
+    byLabel.set(label, (byLabel.get(label) ?? 0) + 1);
+  }
+  const topTypes = [...byLabel.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (topTypes.length > 0) {
-    facts.push(`Most common: ${topTypes.map(([t, n]) => `${READABLE[t] ?? t} (${n})`).join(", ")}.`);
+    facts.push(`Most common: ${topTypes.map(([label, n]) => `${label} (${n})`).join(", ")}.`);
   }
 
-  const severe = inWindow.filter((s) => s.severity === "HIGH" || s.severity === "CRITICAL");
+  const severe = inWindow.filter((s) => (s.severity === "HIGH" || s.severity === "CRITICAL") && !isFewHoldersSignal(s));
   if (severe.length > 0) {
     const severeTokens = new Set(severe.map((s) => s.token)).size;
     facts.push(`${severe.length} of those signals were HIGH or CRITICAL severity, on ${severeTokens} token(s).`);
@@ -84,8 +106,11 @@ export function buildMarketBriefFacts(input: MarketBriefInput): string[] {
 
   for (const [i, e] of input.radar.slice(0, 3).entries()) {
     const risk = e.riskLevel ? `risk level ${e.riskLevel}` : "risk level not yet computed";
+    const what = isFewHoldersSignal(e.topSignal)
+      ? "very few holders so far, too few for a top-10 share to mean anything"
+      : `${e.topSignal.explanation}${e.topSignal.evidence && e.topSignal.evidence !== e.topSignal.explanation ? ` (${e.topSignal.evidence})` : ""}`;
     facts.push(
-      `Radar #${i + 1}: token ${shortAddress(e.token)} — ${e.topSignal.explanation}${e.topSignal.evidence && e.topSignal.evidence !== e.topSignal.explanation ? ` (${e.topSignal.evidence})` : ""}; ` +
+      `Radar #${i + 1}: token ${shortAddress(e.token)} — ${what}; ` +
         `${e.distinctSignalTypes} distinct signal type(s) converging, ${risk}` +
         (e.topSignalLifecycle ? `; that signal is ${e.topSignalLifecycle.stage} (${e.topSignalLifecycle.recentCount} in the last window vs ${e.topSignalLifecycle.previousCount} before).` : ".")
     );

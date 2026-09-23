@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type Anthropic from "@anthropic-ai/sdk";
-import { buildMarketBriefFacts, buildMarketBrief, shortAddress } from "./brief.js";
+import { buildMarketBriefFacts, buildMarketBrief, shortAddress, isFewHoldersSignal } from "./brief.js";
 import type { RadarEntry } from "../radar/radarService.js";
 import type { StoredSignal } from "../persistence/signalsStore.js";
 
@@ -78,4 +78,42 @@ test("no key → the brief is the facts themselves, marked DETERMINISTIC_FALLBAC
   const b = await buildMarketBrief({ radar: [], signals: [], monitoredTokens: 0, windowSeconds: 3600, now: NOW }, null);
   assert.equal(b.summary.source, "DETERMINISTIC_FALLBACK");
   assert.equal(b.summary.text, b.facts.join(" "));
+});
+
+
+test("a token with fewer than 10 holders is 'very few holders', never 'holder concentration' or a severe finding", () => {
+  const few = (token: string, evidence: string, severity: StoredSignal["severity"]): StoredSignal =>
+    ({ token, type: "HOLDER_CONCENTRATION", severity, confidence: 85, evidence, explanation: evidence, timestamp: NOW - 60 });
+  const signals = [
+    few(T1, "only 3 holders so far — too few for a top-10 share to mean anything", "MEDIUM"),
+    // written before the fix: with < 10 holders "top 10 own 100%" is arithmetic
+    few(T2, "top 10 holders own 100% of tracked supply", "CRITICAL"),
+  ];
+  const facts = buildMarketBriefFacts({ radar: [], signals, monitoredTokens: 5, windowSeconds: 3600, now: NOW });
+  const text = facts.join(" ");
+  assert.match(text, /tokens with very few holders yet \(2\)/);
+  assert.doesNotMatch(text, /holder concentration/);
+  assert.doesNotMatch(text, /HIGH or CRITICAL/, "neither counts as a severe finding");
+});
+
+test("real concentration (10+ holders) is still reported as concentration and still counts as severe", () => {
+  const s: StoredSignal = { token: T1, type: "HOLDER_CONCENTRATION", severity: "CRITICAL", confidence: 85, evidence: "top 10 holders own 82% of tracked supply", explanation: "top 10 holders own 82% of tracked supply", timestamp: NOW - 60 };
+  const text = buildMarketBriefFacts({ radar: [], signals: [s], monitoredTokens: 1, windowSeconds: 3600, now: NOW }).join(" ");
+  assert.match(text, /holder concentration \(1\)/);
+  assert.match(text, /1 of those signals were HIGH or CRITICAL/);
+});
+
+test("a radar entry whose top signal is a few-holders row is described honestly", () => {
+  const e = radar(T1, null, null);
+  e.topSignal = { type: "HOLDER_CONCENTRATION", severity: "CRITICAL", confidence: 85, evidence: "top 10 holders own 100% of tracked supply", explanation: "top 10 holders own 100% of tracked supply", timestamp: NOW } as RadarEntry["topSignal"];
+  const text = buildMarketBriefFacts({ radar: [e], signals: [], monitoredTokens: 1, windowSeconds: 3600, now: NOW }).join(" ");
+  assert.match(text, /very few holders so far/);
+  assert.doesNotMatch(text, /own 100%/);
+});
+
+test("isFewHoldersSignal only matches the tiny-token cases", () => {
+  assert.equal(isFewHoldersSignal({ type: "HOLDER_CONCENTRATION", evidence: "only 1 holder so far — too few" }), true);
+  assert.equal(isFewHoldersSignal({ type: "HOLDER_CONCENTRATION", evidence: "top 10 holders own 100% of tracked supply" }), true);
+  assert.equal(isFewHoldersSignal({ type: "HOLDER_CONCENTRATION", evidence: "top 10 holders own 71% of tracked supply" }), false);
+  assert.equal(isFewHoldersSignal({ type: "THIN_LIQUIDITY", evidence: "only 3 holders so far" }), false);
 });
