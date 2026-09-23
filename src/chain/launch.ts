@@ -1,3 +1,4 @@
+import { getStoredLaunchRecord, saveLaunchRecord } from "../persistence/launchRegistry.js";
 import { getClient } from "./client.js";
 import { PONS_V2_FACTORY, factoryAbi } from "./pons.js";
 import { config } from "../core/config.js";
@@ -40,6 +41,9 @@ export async function readLaunchRecord(
   tokenAddress: `0x${string}`,
   sinceBlock: bigint = 0n
 ): Promise<LaunchRecord | NoLaunchRecord> {
+  const stored = getStoredLaunchRecord(tokenAddress);
+  if (stored) return stored; // zero RPC — and works however old the token is
+
   const client = getClient();
   const latest = await client.getBlockNumber();
   const { fromBlock } = boundedScanStart(sinceBlock, latest, true, config.maxHolderScanBlocks);
@@ -76,7 +80,7 @@ export async function readLaunchRecord(
     graduationThreshold: bigint;
   };
 
-  return {
+  const rec: LaunchRecord = {
     found: true,
     token: tokenAddress,
     curve: args.curve,
@@ -87,6 +91,8 @@ export async function readLaunchRecord(
     launchBlock: log.blockNumber!,
     launchTxHash: log.transactionHash!,
   };
+  saveLaunchRecord(rec);
+  return rec;
 }
 
 export interface CurveState {

@@ -1,3 +1,4 @@
+import { getHolderCoverage, applyHolderDeltas, getPositiveBalances } from "../persistence/holderStore.js";
 import { formatUnits } from "viem";
 import { getClient } from "./client.js";
 import { erc20Abi } from "./token.js";
@@ -18,6 +19,8 @@ export interface HolderStats {
   whaleMoves: { from: string; to: string; amount: number; txHash: string; blockNumber: string }[];
   /** Every token movement after pass-throughs are collapsed (real sender → real receiver), for trade attribution. */
   flows?: { from: string; to: string; amount: number; txHash: string }[];
+  /** Total held by ALL real holders (curve, zero address, protocol and pass-throughs excluded) — the denominator for concentration. */
+  totalHeld?: number;
 }
 
 const PROTOCOL_SET = new Set(PONS_PROTOCOL_ADDRESSES.map((a) => a.toLowerCase()));
@@ -45,6 +48,46 @@ export async function readHolderStats(
   const latest = await client.getBlockNumber();
 
   const launch = await readLaunchRecord(tokenAddress);
+
+  // Incremental, lifetime-exact path: apply only transfers since the last
+  // check to stored balances (persistence/holderStore.ts). First sight
+  // backfills from the launch block if it's within MAX_HOLDER_BACKFILL_BLOCKS.
+  if (launch.found) {
+    const lb = launch.launchBlock;
+    const cov = getHolderCoverage(tokenAddress);
+    const from = cov && BigInt(cov.throughBlock) >= lb - 1n ? BigInt(cov.throughBlock) + 1n : latest - lb <= config.maxHolderBackfillBlocks ? lb : null;
+    if (from !== null) {
+      const logs =
+        from <= latest
+          ? await fetchLogsInChunks(
+              (range) => client.getLogs({ address: tokenAddress, event: erc20Abi[0], fromBlock: range.fromBlock, toBlock: range.toBlock }),
+              from,
+              latest,
+              config.logScanChunkBlocks
+            )
+          : [];
+      const transfers = logs.map((l) => ({ ...(l.args as { from: string; to: string; value: bigint }), txHash: l.transactionHash!, blockNumber: l.blockNumber! }));
+      const core = computeHolderCore(transfers, decimals, whaleThresholdTokens, launch.curve, top);
+      const deltas = new Map<string, bigint>();
+      for (const t of transfers) {
+        deltas.set(t.from.toLowerCase(), (deltas.get(t.from.toLowerCase()) ?? 0n) - t.value);
+        deltas.set(t.to.toLowerCase(), (deltas.get(t.to.toLowerCase()) ?? 0n) + t.value);
+      }
+      applyHolderDeltas(tokenAddress, Number(lb), Number(latest), deltas);
+      const excluded = new Set<string>([...PROTOCOL_SET, "0x0000000000000000000000000000000000000000", launch.curve.toLowerCase()]);
+      const held = getPositiveBalances(tokenAddress).filter((b) => !excluded.has(b.holder));
+      const totalHeld = held.reduce((acc, b) => acc + b.balance, 0n);
+      const topAccumulators = held
+        .sort((x, y) => (y.balance > x.balance ? 1 : y.balance < x.balance ? -1 : 0))
+        .slice(0, top)
+        .map((b) => ({ address: b.holder, netChange: Number(formatUnits(b.balance, decimals)) }));
+      return {
+        windowFromBlock: lb, windowToBlock: latest, isLifetime: true, holderCount: held.length, topAccumulators,
+        whaleMoves: core.whaleMoves, flows: core.flows, totalHeld: Number(formatUnits(totalHeld, decimals)),
+      };
+    }
+  }
+
   const trueFromBlock = launch.found
     ? launch.launchBlock
     : latest > config.signalWindowBlocks
@@ -72,8 +115,8 @@ export async function readHolderStats(
     launch.found ? launch.curve : null,
     top
   );
-  const { holderCount, topAccumulators, whaleMoves, flows } = core;
-  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves, flows };
+  const { holderCount, topAccumulators, whaleMoves, flows, totalHeld } = core;
+  return { windowFromBlock: fromBlock, windowToBlock: latest, isLifetime, holderCount, topAccumulators, whaleMoves, flows, totalHeld };
 }
 
 export interface RawTransfer { from: string; to: string; value: bigint; txHash: string; blockNumber: bigint }
@@ -105,7 +148,7 @@ export function computeHolderCore(
   whaleThresholdTokens: number,
   curve: string | null,
   top = 10
-): Pick<HolderStats, "holderCount" | "topAccumulators" | "whaleMoves" | "flows"> {
+): Pick<HolderStats, "holderCount" | "topAccumulators" | "whaleMoves" | "flows" | "totalHeld"> {
   const excluded = new Set<string>([...PROTOCOL_SET, ZERO]);
   if (curve) excluded.add(curve.toLowerCase());
 
@@ -163,12 +206,17 @@ export function computeHolderCore(
     .map((t) => ({ from: t.from, to: t.to, amount: Number(formatUnits(t.value, decimals)), txHash: t.txHash, blockNumber: t.blockNumber.toString() }));
 
   const flows = collapsed.map((t) => ({ from: t.from, to: t.to, amount: Number(formatUnits(t.value, decimals)), txHash: t.txHash }));
-  return { holderCount, topAccumulators, whaleMoves, flows };
+  let held = 0n;
+  for (const [address, ch] of netChange) if (ch > 0n && !excluded.has(address)) held += ch;
+  return { holderCount, topAccumulators, whaleMoves, flows, totalHeld: Number(formatUnits(held, decimals)) };
 }
 
 /** Concentration of the top N accumulators as a % of total positive balance seen — used by risk analysis. */
 export function topHolderConcentrationPercent(stats: HolderStats, topN: number): number | null {
-  const positiveTotal = stats.topAccumulators.filter((h) => h.netChange > 0).reduce((s, h) => s + h.netChange, 0);
+  // Found live: the denominator used to be the top-10 list itself, so any
+  // token with holders read "top 10 own 100%" (a false CRITICAL on nearly
+  // everything). It's now the total held by ALL real holders.
+  const positiveTotal = stats.totalHeld ?? stats.topAccumulators.filter((h) => h.netChange > 0).reduce((s, h) => s + h.netChange, 0);
   if (positiveTotal <= 0) return null;
   const topSum = stats.topAccumulators
     .filter((h) => h.netChange > 0)

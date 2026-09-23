@@ -1,3 +1,4 @@
+import { saveLaunchRecord } from "../persistence/launchRegistry.js";
 import { formatUnits } from "viem";
 import { getClient } from "./client.js";
 import { config } from "../core/config.js";
@@ -190,6 +191,16 @@ export async function scanRecentLaunches(windowBlocks?: bigint, limit?: number, 
     latest,
     config.logScanChunkBlocks
   );
+
+  // Every launch seen goes into the permanent registry (chain/launch.ts reads it first).
+  for (const log of launchLogs) {
+    const a = log.args as RawLaunchLog["args"];
+    if (!log.blockNumber || !log.transactionHash) continue;
+    try {
+      saveLaunchRecord({ found: true, token: a.token, curve: a.curve, deployer: a.deployer, pairToken: a.pairToken,
+        launchConfigId: a.launchConfigId, graduationThreshold: a.graduationThreshold, launchBlock: log.blockNumber, launchTxHash: log.transactionHash });
+    } catch { /* registry is best-effort; never blocks discovery */ }
+  }
 
   const deployerCounts = new Map<string, number>();
   for (const log of launchLogs) {

@@ -88,3 +88,10 @@ test("REGRESSION: re-scanning a trade with better attribution corrects its walle
   assert.equal(getTradesForWallet(MIDDLE).length, 0);
   assert.equal(getTradesForWallet(WALLET).length, 1);
 });
+
+test("getLatestTradePrice returns the most recent trade's own price, or null", async () => {
+  const { getLatestTradePrice } = await import("./walletTradesStore.js");
+  assert.equal(getLatestTradePrice(TOKEN), null);
+  recordCurveScan(TOKEN, 100, 100, 200, [trade({ txHash: "0x01", blockNumber: 110, tokenAmount: 1000, quoteAmount: 1 }), trade({ txHash: "0x02", blockNumber: 150, tokenAmount: 1000, quoteAmount: 3 })]);
+  assert.equal(getLatestTradePrice(TOKEN), 0.003);
+});

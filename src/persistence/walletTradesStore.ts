@@ -144,3 +144,11 @@ export function getTradesForWallet(wallet: `0x${string}`): StoredTrade[] {
     priceInPair: r.price_in_pair,
   }));
 }
+
+/** Price of the most recent recorded trade for a token (pair asset per token), or null. */
+export function getLatestTradePrice(token: string): number | null {
+  const row = getDb()
+    .prepare(`SELECT price_in_pair FROM wallet_trades WHERE token = ? ORDER BY block_number DESC, log_index DESC LIMIT 1`)
+    .get(token.toLowerCase()) as { price_in_pair: number } | undefined;
+  return row ? row.price_in_pair : null;
+}

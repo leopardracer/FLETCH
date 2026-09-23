@@ -6,7 +6,7 @@ import { NATIVE_ETH, curveAbi } from "./pons.js";
 import { config } from "../core/config.js";
 import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
 import { decodeCurveTrade } from "./curveTrades.js";
-import type { CurveTrade } from "../persistence/walletTradesStore.js";
+import { getTradeCoverage, getLatestTradePrice, type CurveTrade } from "../persistence/walletTradesStore.js";
 
 export interface LiquidityInfo {
   hasPool: boolean;
@@ -122,8 +122,17 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
 async function lastTradePrice(launch: LaunchRecord): Promise<{ price: number | null; scan?: TradeScan }> {
   const client = getClient();
   const latest = await client.getBlockNumber();
-  const { fromBlock } = boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks);
-  const [buys, sells] = await Promise.all([
+  // Incremental: continue from where the last scan of this curve ended, so
+  // coverage stays gap-free from launch however old the token is (found
+  // live: a fixed 20,000-block window is only ~1.4h on Robinhood Chain).
+  const cov = getTradeCoverage(launch.token);
+  const fromBlock =
+    cov?.coveredThrough != null
+      ? BigInt(cov.coveredThrough) + 1n
+      : latest - launch.launchBlock <= config.maxHolderBackfillBlocks
+      ? launch.launchBlock
+      : boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks).fromBlock;
+  const [buys, sells] = fromBlock > latest ? [[], []] : await Promise.all([
     fetchLogsInChunks(
       (r) => client.getLogs({ address: launch.curve, event: curveAbi[0], fromBlock: r.fromBlock, toBlock: r.toBlock }),
       fromBlock,
@@ -145,7 +154,7 @@ async function lastTradePrice(launch: LaunchRecord): Promise<{ price: number | n
   }
 
   const all = [...buys, ...sells].sort((a, b) => Number(b.blockNumber! - a.blockNumber!));
-  if (all.length === 0) return { price: null, scan };
+  if (all.length === 0) return { price: getLatestTradePrice(launch.token), scan }; // no trades since last check — last known real trade
   const last = decodeCurveTrade(all[0]);
   return { price: last ? last.quoteAmount / last.tokenAmount : null, scan };
 }

@@ -90,6 +90,32 @@ function createSchema(db: DatabaseSync): void {
     -- returns), written by every monitoring check and every live report.
     -- Found live: token pages and the feed re-read the chain on every view and
     -- hit the public RPC's rate limit; now they're served from here when fresh.
+    -- Every Pons V2 launch FLETCH has ever seen, forever. Found live: the
+    -- chain produces ~14,000 blocks an hour, and launch records were looked
+    -- up by scanning only the last MAX_HOLDER_SCAN_BLOCKS (20,000 ≈ 1.4h) —
+    -- so FLETCH "forgot" every token older than that: no curve, no price, no
+    -- trades, 0 holders. A launch record never changes; it's stored once.
+    CREATE TABLE IF NOT EXISTS launch_records (
+      token TEXT PRIMARY KEY,
+      record_json TEXT NOT NULL,
+      launch_block INTEGER NOT NULL
+    );
+
+    -- Incremental holder balances: each check applies only the transfers
+    -- since the last one, so holder counts stay lifetime-exact however old
+    -- the token is, without re-reading its whole history every time.
+    CREATE TABLE IF NOT EXISTS token_balances (
+      token TEXT NOT NULL,
+      holder TEXT NOT NULL,
+      balance TEXT NOT NULL,
+      PRIMARY KEY (token, holder)
+    );
+    CREATE TABLE IF NOT EXISTS holder_scan_coverage (
+      token TEXT PRIMARY KEY,
+      launch_block INTEGER NOT NULL,
+      through_block INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS token_reports (
       token TEXT PRIMARY KEY,
       report_json TEXT NOT NULL,
