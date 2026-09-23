@@ -3,7 +3,9 @@ import { scanRecentLaunches, type DetectedLaunch } from "../chain/hunt.js";
 import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
 import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
 import { getSocialSignalForToken } from "../social/social.js";
-import { analyzeAndPersist } from "../signals/signalService.js";
+import { buildIntel } from "../intel/tokenIntel.js";
+import { saveReport } from "../persistence/reportStore.js";
+import { readTokenInfo } from "../chain/token.js";
 import { getSignalsForToken } from "../persistence/signalsStore.js";
 import { pruneSnapshotsOlderThan } from "../persistence/snapshots.js";
 import { pruneSignalsOlderThan } from "../persistence/signalsStore.js";
@@ -14,6 +16,8 @@ import {
   recordCheckFailure,
   countMonitored,
   rescheduleWithoutPenalty,
+  evictOneForNew,
+  getMonitoredToken,
   reactivateFailed,
   type MonitoredToken,
   type MonitoringPriority,
@@ -34,6 +38,8 @@ export { rpcBackoff };
 export interface MonitoringDeps {
   scanLaunches: () => Promise<DetectedLaunch[]>;
   getMetrics: (token: `0x${string}`) => Promise<TokenMetrics>;
+  /** Optional: symbol/name for the stored report (cached per process). Absent → stored without a symbol. */
+  getInfo?: (token: `0x${string}`) => Promise<{ symbol: string | null; name: string | null; contractExists: boolean }>;
   getSmartMoney: (token: `0x${string}`) => Promise<SmartMoneyReport>;
   getSocial: (token: `0x${string}`) => Promise<SocialReport>;
 }
@@ -43,6 +49,7 @@ const realProvider = new RpcChainDataProvider();
 export const defaultDeps: MonitoringDeps = {
   scanLaunches: () => scanRecentLaunches(),
   getMetrics: (t) => realProvider.getTokenMetrics(t),
+  getInfo: (t) => readTokenInfo(t),
   getSmartMoney: getSmartMoneyForToken,
   getSocial: getSocialSignalForToken,
 };
@@ -83,7 +90,8 @@ export async function runDiscoveryCycle(
   let skippedCapacity = 0;
 
   for (const launch of launches) {
-    if (countMonitored() >= config.maxMonitoredTokens) {
+    if (getMonitoredToken(launch.token)) continue; // already watched — not a capacity skip
+    if (countMonitored() >= config.maxMonitoredTokens && !evictOneForNew()) {
       skippedCapacity++;
       continue; // bounded queue — a launch storm can't grow storage/RPC load without limit
     }
@@ -145,7 +153,10 @@ export async function runMonitoringCycle(
     try {
       const metrics = await deps.getMetrics(item.token as `0x${string}`);
       const [smartMoney, social] = await Promise.all([deps.getSmartMoney(item.token as `0x${string}`), deps.getSocial(item.token as `0x${string}`)]);
-      analyzeAndPersist(item.token as `0x${string}`, item.launch, metrics, smartMoney, social, now);
+      const info = (await deps.getInfo?.(item.token as `0x${string}`).catch(() => null)) ?? { symbol: null, name: null, contractExists: true };
+      // Same report a token page shows — stored so pages and the feed can be
+      // served without re-reading the chain (persistence/reportStore.ts).
+      saveReport(item.token, buildIntel(item.token as `0x${string}`, info, item.launch, metrics, smartMoney, social, now), now);
 
       const phase: Phase | null = metrics.graduated === null ? null : metrics.graduated ? "GRADUATED" : "CURVE";
       const priority = computeNextPriority(item, now);

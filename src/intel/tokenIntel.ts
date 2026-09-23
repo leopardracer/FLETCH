@@ -1,7 +1,9 @@
 import { config } from "../core/config.js";
 import type { TokenInfo } from "../chain/token.js";
 import type { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
-import { scanRecentLaunches } from "../chain/hunt.js";
+import { scanRecentLaunches, type DetectedLaunch } from "../chain/hunt.js";
+import { getMonitoredToken } from "../monitoring/monitoringStore.js";
+import { saveReport } from "../persistence/reportStore.js";
 import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
 import { getSocialSignalForToken } from "../social/social.js";
 import { analyzeAndPersist } from "../signals/signalService.js";
@@ -53,13 +55,28 @@ export async function getTokenIntel(
   provider: RpcChainDataProvider
 ): Promise<TokenIntel> {
   const metrics = await provider.getTokenMetrics(address);
-
-  const launches = await scanRecentLaunches(50_000n);
-  const launch = launches.find((l) => l.token.toLowerCase() === address.toLowerCase()) ?? null;
-
+  // The monitoring queue already stored this token's launch record — reuse it
+  // instead of re-scanning (and re-enriching) every launch in the window.
+  const launch =
+    getMonitoredToken(address)?.launch ?? (await scanRecentLaunches(50_000n, undefined, address))[0] ?? null;
   const smartMoney = await getSmartMoneyForToken(address);
   const social = await getSocialSignalForToken(address);
-  const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social);
+  const intel = buildIntel(address, info, launch, metrics, smartMoney, social);
+  saveReport(address, intel);
+  return intel;
+}
+
+/** Assembles (and persists signals for) a report from data already read — no chain reads here. */
+export function buildIntel(
+  address: `0x${string}`,
+  info: Pick<TokenInfo, "symbol" | "name" | "contractExists">,
+  launch: DetectedLaunch | null,
+  metrics: TokenMetrics,
+  smartMoney: SmartMoneyReport,
+  social: SocialReport,
+  now?: number
+): TokenIntel {
+  const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social, now);
   const whyIsItMoving = explainWhyItsMoving(signals, risk);
 
   return {

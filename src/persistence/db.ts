@@ -86,6 +86,17 @@ function createSchema(db: DatabaseSync): void {
     -- trades. PnL is only computed over the contiguous stretch starting at
     -- the token's launch block — a gap means a missed buy or sell, and a
     -- cost basis built on a missed trade would be wrong, not just imprecise.
+    -- The latest full FLETCH report per token (same JSON GET /api/tokens/:address
+    -- returns), written by every monitoring check and every live report.
+    -- Found live: token pages and the feed re-read the chain on every view and
+    -- hit the public RPC's rate limit; now they're served from here when fresh.
+    CREATE TABLE IF NOT EXISTS token_reports (
+      token TEXT PRIMARY KEY,
+      report_json TEXT NOT NULL,
+      taken_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_token_reports_taken ON token_reports(taken_at);
+
     CREATE TABLE IF NOT EXISTS trade_scan_coverage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       token TEXT NOT NULL,

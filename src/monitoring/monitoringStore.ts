@@ -252,3 +252,26 @@ function rowToMonitoredToken(row: MonitoredTokenRow): MonitoredToken {
     launch: deserializeLaunch(row.launch_json ?? null),
   };
 }
+
+/**
+ * Frees ONE slot in a full queue for a new launch. Found live: at the 500
+ * cap every fresh launch was skipped while dead tokens kept their slots.
+ * Only ever evicts tokens that have stopped earning attention — FAILED
+ * first, then COMPLETED, then LOW priority — least recently useful first.
+ * HIGH and NORMAL active tokens are never evicted. Returns false if nothing
+ * is evictable (the new launch is then skipped, as before).
+ */
+export function evictOneForNew(): boolean {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT token FROM monitored_tokens
+       WHERE status IN ('FAILED','COMPLETED') OR (status = 'ACTIVE' AND priority = 'LOW')
+       ORDER BY CASE status WHEN 'FAILED' THEN 0 WHEN 'COMPLETED' THEN 1 ELSE 2 END, COALESCE(last_success_at, 0) ASC
+       LIMIT 1`
+    )
+    .get() as { token: string } | undefined;
+  if (!row) return false;
+  db.prepare(`DELETE FROM monitored_tokens WHERE token = ?`).run(row.token);
+  return true;
+}

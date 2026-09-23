@@ -329,3 +329,35 @@ test("POST /api/chat has its own stricter per-IP limit, separate from the genera
     assert.equal((await fetch(`${base}/api/ai`)).status, 200);
   });
 });
+
+// ---------- served from stored reports (no chain reads) ----------
+const { saveReport } = await import("../persistence/reportStore.js");
+
+test("GET /api/tokens/:address serves a fresh stored report without touching the chain (RPC_URL is unset here)", async () => {
+  const T = "0x00000000000000000000000000000000000000c1";
+  saveReport(T, { token: { address: T, symbol: "CACHE" }, whyIsItMoving: { bullets: ["b"], risks: ["r"], insufficientData: false } });
+  const res = await fetch(`${baseUrl}/api/tokens/${T}`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.source, "cache");
+  assert.equal(body.token.symbol, "CACHE");
+  assert.equal(typeof body.asOf, "number");
+  // and the AI card can use it right away
+  assert.equal((await fetch(`${baseUrl}/api/tokens/${T}/ai-summary`)).status, 200);
+});
+
+test("GET /api/tokens builds the feed from stored reports once there are enough — instant, sorted by score", async () => {
+  for (let i = 0; i < 6; i++) {
+    const T = `0x${(0xd0 + i).toString(16).padStart(40, "0")}`;
+    saveReport(T, { token: { symbol: `T${i}` }, fletchScore: { overall: 10 * i }, risk: { level: "LOW" }, signals: [] });
+  }
+  const t0 = Date.now();
+  const res = await fetch(`${baseUrl}/api/tokens`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.source, "cache");
+  assert.ok(body.count >= 6);
+  assert.ok(Date.now() - t0 < 2000);
+  const scores = body.tokens.map((r: { fletchScore: number | null }) => r.fletchScore ?? -1);
+  assert.deepEqual(scores, [...scores].sort((a: number, b: number) => b - a));
+});

@@ -20,11 +20,13 @@ import { getRecentSignals, getSignalsForToken, getSignalsForTokenSince } from ".
 import { computeLifecycles } from "../signals/lifecycle.js";
 import { getRadar } from "../radar/radarService.js";
 import { RADAR_WINDOW_SECONDS_DEFAULT } from "../radar/radarEngine.js";
-import { getMonitoringHealth } from "../monitoring/monitoringStore.js";
+import { getMonitoringHealth, getMonitoredToken } from "../monitoring/monitoringStore.js";
 import { countSnapshotsSince } from "../persistence/snapshots.js";
 import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
 import { rpcBackoff, isRpcRateLimitError, type RpcBackoffState } from "../core/rpcBackoff.js";
+import { getReport, listReports } from "../persistence/reportStore.js";
+import type { Signal } from "../signals/types.js";
 import { rephraseSummary, rephraseFacts } from "../ai/rephrase.js";
 import { buildMarketBrief, type MarketBrief } from "../ai/brief.js";
 import { buildWalletFacts } from "../ai/walletExplain.js";
@@ -110,6 +112,10 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 
 /** How long the live token feed (GET /api/tokens) is reused before re-reading the chain. */
 const FEED_CACHE_SECONDS = 90;
+/** A stored report this fresh is served as-is instead of re-reading the chain. */
+const REPORT_FRESH_SECONDS = 300;
+/** The cached feed only lists tokens whose report is at most this old. */
+const FEED_REPORT_MAX_AGE_SECONDS = 3 * 3600;
 
 /** How long a computed market brief is reused before the radar/signal feed is re-read. */
 const BRIEF_CACHE_SECONDS = 120;
@@ -218,8 +224,37 @@ export function createServer(options?: {
       res.json(cached.body);
       return;
     }
-    const launches = await scanRecentLaunches(windowBlocks);
-    const limited = launches.slice(0, 20); // cap: full metrics per token is several RPC round-trips
+    // Preferred path: the monitoring queue has already analyzed these tokens —
+    // build the feed from stored reports, zero chain reads, instant.
+    if (windowBlocks === undefined && req.query.live !== "1") {
+      const since = Math.floor(Date.now() / 1000) - FEED_REPORT_MAX_AGE_SECONDS;
+      const reps = listReports(since, 200);
+      if (reps.length >= 5) {
+        const rows = reps
+          .map((r) => {
+            const rep = r.report as { token?: { symbol?: string | null }; fletchScore?: { overall?: number | null }; risk?: { level?: string }; signals?: Signal[] };
+            const m = getMonitoredToken(r.token as `0x${string}`);
+            return {
+              token: r.token,
+              symbol: rep.token?.symbol ?? null,
+              deployer: m?.launch?.deployer ?? null,
+              launchBlock: m?.launch ? String(m.launch.launchBlock) : null,
+              devBuyPercent: m?.launch ? devBuyPercentOfCurveSupply(m.launch.devBuyTokens) : null,
+              riskLevel: rep.risk?.level ?? null,
+              fletchScore: rep.fletchScore?.overall ?? null,
+              topSignal: rep.signals && rep.signals.length ? pickTopSignal(rep.signals) : null,
+              asOf: r.takenAt,
+            };
+          })
+          .sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1))
+          .slice(0, 50);
+        const body = { count: rows.length, tokens: rows, source: "cache" };
+        res.json(body);
+        return;
+      }
+    }
+    const launches = await scanRecentLaunches(windowBlocks, 20);
+    const limited = launches; // already limited to the 20 newest before enrichment
 
     // 3 at a time, not all at once: firing every token's reads in parallel is
     // what tripped the public RPC's rate limit and left all 50 rows unscored.
@@ -286,22 +321,41 @@ export function createServer(options?: {
   // response existing callers already depend on.
   app.get("/api/tokens/:address", asyncRoute(async (req, res) => {
     const address = req.params.address as `0x${string}`;
-    const info = await readTokenInfo(address);
+    const now = Math.floor(Date.now() / 1000);
+    const stored = getReport(address);
+    const fresh = stored && now - stored.takenAt < REPORT_FRESH_SECONDS && req.query.live !== "1";
 
-    if (!info.contractExists) {
-      res.status(404).json({ error: `No contract found at ${address} on Robinhood Chain (chain ID ${config.chainId}).` });
-      return;
+    let body: Record<string, unknown>;
+    let why: WhyIsItMoving;
+    if (fresh) {
+      // Computed by monitoring (or a view) within the last few minutes — no chain reads.
+      body = { ...stored!.report, source: "cache", asOf: stored!.takenAt };
+      why = stored!.report.whyIsItMoving as WhyIsItMoving;
+    } else {
+      try {
+        const info = await readTokenInfo(address);
+        if (!info.contractExists) {
+          res.status(404).json({ error: `No contract found at ${address} on Robinhood Chain (chain ID ${config.chainId}).` });
+          return;
+        }
+        const intel = await getTokenIntel(address, info, provider);
+        body = { ...(bigIntSafe(intel) as unknown as Record<string, unknown>), source: "live", asOf: now };
+        why = intel.whyIsItMoving;
+      } catch (e: unknown) {
+        // Rate-limited with an older report on file: serve it, clearly marked stale.
+        if (stored && isRpcRateLimitError(e)) {
+          body = { ...stored.report, source: "cache", stale: true, asOf: stored.takenAt };
+          why = stored.report.whyIsItMoving as WhyIsItMoving;
+        } else throw e;
+      }
     }
-
-    const intel = await getTokenIntel(address, info, provider);
-    const body: Record<string, unknown> = bigIntSafe(intel) as unknown as Record<string, unknown>;
     // Kept briefly so the dashboard's AI analyst card (GET .../ai-summary)
     // can rephrase exactly these facts without a second round of chain reads.
     if (whyCache.size > 1000) whyCache.clear();
-    whyCache.set(address.toLowerCase(), { at: Math.floor(Date.now() / 1000), why: intel.whyIsItMoving });
+    whyCache.set(address.toLowerCase(), { at: Math.floor(Date.now() / 1000), why });
 
     if (req.query.summary === "ai") {
-      body.naturalLanguageSummary = await rephraseSummary(intel.whyIsItMoving);
+      body.naturalLanguageSummary = await rephraseSummary(why);
     }
 
     res.json(body);

@@ -159,7 +159,14 @@ export async function enrichOneLaunch(
  * (see enrichOneLaunch) so one rate-limited launch never loses the
  * others found in the same scan.
  */
-export async function scanRecentLaunches(windowBlocks?: bigint): Promise<DetectedLaunch[]> {
+/**
+ * `limit`: enrich only the newest N launches. Found live: the token feed
+ * asked for 20 tokens but the scan enriched all ~470 launches in the window
+ * first (several RPC reads each) and threw 450 away — 200+ seconds.
+ * `onlyToken`: enrich just that one launch (a token page needs one record,
+ * not the whole window).
+ */
+export async function scanRecentLaunches(windowBlocks?: bigint, limit?: number, onlyToken?: `0x${string}`): Promise<DetectedLaunch[]> {
   const client = getClient();
   const latest = await client.getBlockNumber();
   const window = windowBlocks ?? config.signalWindowBlocks;
@@ -193,7 +200,10 @@ export async function scanRecentLaunches(windowBlocks?: bigint): Promise<Detecte
   const results: DetectedLaunch[] = [];
   // Sequential, not Promise.all — deliberately doesn't add MORE concurrent
   // load on an already rate-limited RPC while enriching a batch of launches.
-  for (const log of launchLogs) {
+  let toEnrich = [...launchLogs].sort((a, b) => Number((b.blockNumber ?? 0n) - (a.blockNumber ?? 0n)));
+  if (onlyToken) toEnrich = toEnrich.filter((l) => ((l.args as RawLaunchLog["args"]).token ?? "").toLowerCase() === onlyToken.toLowerCase());
+  if (limit !== undefined) toEnrich = toEnrich.slice(0, limit);
+  for (const log of toEnrich) {
     const args = log.args as RawLaunchLog["args"];
     results.push(await enrichOneLaunch(log as RawLaunchLog, deployerCounts.get(args.deployer) ?? 1));
   }
