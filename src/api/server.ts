@@ -237,7 +237,9 @@ export function createServer(options?: {
       const since = Math.floor(Date.now() / 1000) - FEED_REPORT_MAX_AGE_SECONDS;
       const reps = listReports(since, 200);
       if (reps.length >= 5) {
-        const rows = reps
+        const live = reps.filter((r) => (r.report as { status?: string }).status !== "DEAD");
+        const deadHidden = reps.length - live.length;
+        const rows = live
           .map((r) => {
             const rep = r.report as {
               token?: { symbol?: string | null };
@@ -264,7 +266,7 @@ export function createServer(options?: {
           })
           .sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1))
           .slice(0, 50);
-        const body = { count: rows.length, tokens: rows, source: "cache" };
+        const body = { count: rows.length, tokens: rows, source: "cache", deadHidden };
         res.json(body);
         return;
       }

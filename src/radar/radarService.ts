@@ -1,3 +1,4 @@
+import { getDeadTokens } from "../monitoring/monitoringStore.js";
 import { computeLifecycles, type SignalLifecycle } from "../signals/lifecycle.js";
 import { getDistinctTokensWithRecentSignals, getSignalsForTokenSince } from "../persistence/signalsStore.js";
 import { getLatestSnapshot, type TokenSnapshot } from "../persistence/snapshots.js";
@@ -44,7 +45,8 @@ export interface RadarEntry {
  */
 export async function getRadar(windowSeconds: number = RADAR_WINDOW_SECONDS_DEFAULT, now: number = Math.floor(Date.now() / 1000)): Promise<RadarEntry[]> {
   const since = now - windowSeconds;
-  const candidateTokens = getDistinctTokensWithRecentSignals(since);
+  const dead = getDeadTokens();
+  const candidateTokens = getDistinctTokensWithRecentSignals(since).filter((t) => !dead.has(t.toLowerCase()));
 
   const entries = await Promise.all(
     candidateTokens.map(async (tokenLower) => {

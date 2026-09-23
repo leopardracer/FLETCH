@@ -620,6 +620,7 @@ async function renderFeed() {
       return;
     }
     learnSymbols(data.tokens);
+    const deadNote = data.deadHidden ? `<div class="dead-note"><img src="mascot.png" alt="" /> ${data.deadHidden} dead launch${data.deadHidden === 1 ? "" : "es"} hidden — drained curve, no trades for hours. FLETCH still re-checks them in case they revive.</div>` : "";
     const rows = data.tokens
       .map(
         (t) => `
@@ -641,7 +642,7 @@ async function renderFeed() {
           <tr><th>Token</th><th>Age</th><th>Liquidity</th><th>Holders</th><th>Dev buy</th><th>Risk</th><th>FLETCH Score</th></tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table></div>`;
+      </table></div>${deadNote}`;
   } catch (e) {
     body.innerHTML = stateBlock("error", "COULDN'T LOAD THE FEED", `${e.message} — is the API running and RPC_URL configured?`);
   }
@@ -696,7 +697,7 @@ async function renderToken(address) {
       <a class="back" onclick="location.hash='#/'">&larr; back to feed</a>
       <div class="detail-head">
         <div>
-          <h1>${d.token.symbol ? "$" + esc(d.token.symbol) : "Unresolved token"}</h1>
+          <h1>${d.token.symbol ? "$" + esc(d.token.symbol) : "Unresolved token"}${d.status === "DEAD" ? ` <span class="dead-chip" title="Drained curve, no trades for hours — off the radar, re-checked every few hours">dead</span>` : ""}</h1>
           <div class="addr"><a class="hash" href="${EXPLORER}/token/${esc(d.token.address)}" target="_blank" rel="noopener">${esc(d.token.address)} ↗</a>${d.source === "cache" ? ` <span class="asof">${d.stale ? "stale · " : ""}updated ${fmtAge(d.asOf)} ago</span>` : ""}</div>
         </div>
         <div class="score-big">

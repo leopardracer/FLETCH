@@ -4,6 +4,8 @@ import { RpcChainDataProvider } from "../data/providers/rpcProvider.js";
 import { getSmartMoneyForToken } from "../wallets/smartMoney.js";
 import { getSocialSignalForToken } from "../social/social.js";
 import { buildIntel } from "../intel/tokenIntel.js";
+import { isDeadToken } from "./deadToken.js";
+import { getLastTradeBlock, getTradeCoverage } from "../persistence/walletTradesStore.js";
 import { saveReport } from "../persistence/reportStore.js";
 import { readTokenInfo } from "../chain/token.js";
 import { getSignalsForToken } from "../persistence/signalsStore.js";
@@ -154,13 +156,27 @@ export async function runMonitoringCycle(
       const metrics = await deps.getMetrics(item.token as `0x${string}`);
       const [smartMoney, social] = await Promise.all([deps.getSmartMoney(item.token as `0x${string}`), deps.getSocial(item.token as `0x${string}`)]);
       const info = (await deps.getInfo?.(item.token as `0x${string}`).catch(() => null)) ?? { symbol: null, name: null, contractExists: true };
+      const dead = isDeadToken({
+        metrics,
+        lastTradeBlock: getLastTradeBlock(item.token),
+        scannedThroughBlock: getTradeCoverage(item.token)?.latestScannedTo ?? null,
+        deadLiquidityEth: config.deadLiquidityEth,
+        deadAfterBlocks: config.deadAfterBlocks,
+      });
       // Same report a token page shows — stored so pages and the feed can be
       // served without re-reading the chain (persistence/reportStore.ts).
-      saveReport(item.token, buildIntel(item.token as `0x${string}`, info, item.launch, metrics, smartMoney, social, now), now);
+      saveReport(item.token, buildIntel(item.token as `0x${string}`, info, item.launch, metrics, smartMoney, social, now, { dead }), now);
 
-      const phase: Phase | null = metrics.graduated === null ? null : metrics.graduated ? "GRADUATED" : "CURVE";
-      const priority = computeNextPriority(item, now);
-      recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority), priority);
+      if (dead) {
+        // Off the radar and feed; re-checked rarely so a revival is still caught.
+        recordCheckSuccess(item.token as `0x${string}`, "DEAD", now, now + config.deadRecheckSeconds, "LOW");
+      } else {
+        // A revived token (was DEAD, trades again) returns to CURVE even when graduation is unknown.
+        const phase: Phase | null =
+          metrics.graduated === true ? "GRADUATED" : metrics.graduated === false ? "CURVE" : item.phase === "DEAD" ? "CURVE" : null;
+        const priority = computeNextPriority(item, now);
+        recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority), priority);
+      }
       backoff.recordSuccess();
       succeeded++;
     } catch (e: unknown) {

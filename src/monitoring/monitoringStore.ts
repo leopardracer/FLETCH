@@ -3,7 +3,7 @@ import type { DetectedLaunch } from "../chain/hunt.js";
 
 export type MonitoringStatus = "ACTIVE" | "PAUSED" | "FAILED" | "COMPLETED";
 export type MonitoringPriority = "HIGH" | "NORMAL" | "LOW";
-export type Phase = "CURVE" | "GRADUATED";
+export type Phase = "CURVE" | "GRADUATED" | "DEAD";
 
 export interface MonitoredToken {
   token: string;
@@ -207,6 +207,8 @@ export interface MonitoringHealth {
   pausedCount: number;
   failedCount: number;
   completedCount: number;
+  /** Launches judged dead (drained curve, no trades for a while) — off the radar, re-checked rarely. */
+  deadCount: number;
   dueNowCount: number;
   lastSuccessfulCheckAt: number | null;
   nextScheduledCheckAt: number | null;
@@ -220,6 +222,7 @@ export function getMonitoringHealth(now: number): MonitoringHealth {
   for (const c of counts) byStatus[c.status] = c.n;
   const dueNow = db.prepare(`SELECT COUNT(*) as n FROM monitored_tokens WHERE status = 'ACTIVE' AND next_check_at <= ?`).get(now) as { n: number };
   const lastSuccess = db.prepare(`SELECT MAX(last_success_at) as t FROM monitored_tokens`).get() as { t: number | null };
+  const dead = db.prepare(`SELECT COUNT(*) as n FROM monitored_tokens WHERE phase = 'DEAD'`).get() as { n: number };
   const nextScheduled = db
     .prepare(`SELECT MIN(next_check_at) as t FROM monitored_tokens WHERE status = 'ACTIVE'`)
     .get() as { t: number | null };
@@ -230,6 +233,7 @@ export function getMonitoringHealth(now: number): MonitoringHealth {
     pausedCount: byStatus.PAUSED ?? 0,
     failedCount: byStatus.FAILED ?? 0,
     completedCount: byStatus.COMPLETED ?? 0,
+    deadCount: dead.n,
     dueNowCount: dueNow.n,
     lastSuccessfulCheckAt: lastSuccess.t ?? null,
     nextScheduledCheckAt: nextScheduled.t ?? null,
@@ -274,4 +278,10 @@ export function evictOneForNew(): boolean {
   if (!row) return false;
   db.prepare(`DELETE FROM monitored_tokens WHERE token = ?`).run(row.token);
   return true;
+}
+
+/** Tokens currently judged dead — excluded from the radar and the feed. */
+export function getDeadTokens(): Set<string> {
+  const rows = getDb().prepare(`SELECT token FROM monitored_tokens WHERE phase = 'DEAD'`).all() as { token: string }[];
+  return new Set(rows.map((r) => r.token));
 }

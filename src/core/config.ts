@@ -57,6 +57,13 @@ const envSchema = z.object({
   // eth_getLogs call spanning ~237,000 blocks (an older token's full
   // history) was rejected by the public RPC. These two bound that read.
   LOG_SCAN_CHUNK_BLOCKS: z.coerce.number().default(2_000), // max block range per single eth_getLogs call
+  // A launch is DEAD once its curve holds almost nothing and nobody has traded
+  // for a while (found live: dead launches re-emitted "liquidity is only $0"
+  // every check and filled the radar). Dead tokens leave the radar and feed
+  // and are re-checked rarely, so a revival is still caught.
+  DEAD_LIQUIDITY_ETH: z.coerce.number().default(0.001),
+  DEAD_AFTER_BLOCKS: z.coerce.number().default(50_000), // ≈3.5h on Robinhood Chain
+  DEAD_RECHECK_SECONDS: z.coerce.number().default(6 * 3600),
   MAX_HOLDER_BACKFILL_BLOCKS: z.coerce.number().default(400_000), // first-time lifetime backfill from launch (≈28h on Robinhood Chain); older tokens fall back to a bounded window, never claimed as lifetime
   MAX_HOLDER_SCAN_BLOCKS: z.coerce.number().default(20_000), // how far back a holder scan will ever look, even for an old token
 
@@ -124,6 +131,9 @@ export const config = {
   logScanChunkBlocks: BigInt(env.LOG_SCAN_CHUNK_BLOCKS),
   maxHolderScanBlocks: BigInt(env.MAX_HOLDER_SCAN_BLOCKS),
   maxHolderBackfillBlocks: BigInt(env.MAX_HOLDER_BACKFILL_BLOCKS),
+  deadLiquidityEth: env.DEAD_LIQUIDITY_ETH,
+  deadAfterBlocks: env.DEAD_AFTER_BLOCKS,
+  deadRecheckSeconds: env.DEAD_RECHECK_SECONDS,
   rateLimitWindowMs: env.RATE_LIMIT_WINDOW_MS,
   rateLimitMax: env.RATE_LIMIT_MAX,
   chatRateLimitWindowMs: env.CHAT_RATE_LIMIT_WINDOW_MS,

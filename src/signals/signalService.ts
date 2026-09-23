@@ -35,7 +35,8 @@ export function analyzeAndPersist(
   metrics: TokenMetrics,
   smartMoney: SmartMoneyReport,
   social: SocialReport,
-  now: number = Math.floor(Date.now() / 1000)
+  now: number = Math.floor(Date.now() / 1000),
+  opts: { persistSignals?: boolean } = {}
 ): Analysis {
   const previousSnapshot = getPreviousSnapshot(token, COMPARISON_WINDOW_SECONDS, now);
   const risk = analyzeRisk(launch, metrics, previousSnapshot);
@@ -59,7 +60,7 @@ export function analyzeAndPersist(
   // rapid repeat read (same rate-limit window) would re-file identical signal
   // rows every time, even though nothing new was actually observed.
   const wroteNewSnapshot = recordSnapshot(token, metrics, score, risk.level, now);
-  if (wroteNewSnapshot) {
+  if (wroteNewSnapshot && opts.persistSignals !== false) {
     for (const s of signals) recordSignal(token, s);
   }
 

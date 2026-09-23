@@ -152,3 +152,9 @@ export function getLatestTradePrice(token: string): number | null {
     .get(token.toLowerCase()) as { price_in_pair: number } | undefined;
   return row ? row.price_in_pair : null;
 }
+
+/** Block of the most recent recorded curve trade for a token, or null. */
+export function getLastTradeBlock(token: string): number | null {
+  const row = getDb().prepare(`SELECT MAX(block_number) as b FROM wallet_trades WHERE token = ?`).get(token.toLowerCase()) as { b: number | null };
+  return row?.b ?? null;
+}

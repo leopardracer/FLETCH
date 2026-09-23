@@ -20,6 +20,8 @@ export type DataAvailability = "REAL" | "UNAVAILABLE" | "NOT_YET_IMPLEMENTED" | 
 
 export interface TokenIntel {
   token: { address: `0x${string}`; symbol: string | null; name: string | null; contractExists: boolean };
+  /** "DEAD" when monitoring judged the launch drained and inactive (monitoring/deadToken.ts). */
+  status?: "DEAD";
   metrics: TokenMetrics;
   risk: RiskReport;
   fletchScore: FletchScore;
@@ -74,13 +76,17 @@ export function buildIntel(
   metrics: TokenMetrics,
   smartMoney: SmartMoneyReport,
   social: SocialReport,
-  now?: number
+  now?: number,
+  opts: { dead?: boolean } = {}
 ): TokenIntel {
-  const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social, now);
+  // A dead token still gets an honest report, but its repeat "liquidity is
+  // only $0" signals are not re-filed on every check.
+  const { risk, score, signals } = analyzeAndPersist(address, launch, metrics, smartMoney, social, now, { persistSignals: !opts.dead });
   const whyIsItMoving = explainWhyItsMoving(signals, risk);
 
   return {
     token: { address, symbol: info.symbol, name: info.name, contractExists: info.contractExists },
+    ...(opts.dead ? { status: "DEAD" as const } : {}),
     metrics,
     risk,
     fletchScore: score,

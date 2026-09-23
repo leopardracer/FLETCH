@@ -377,3 +377,11 @@ test("GET /api/tokens/:address falls back to an older stored report, marked stal
   assert.equal(body.stale, true);
   assert.equal(body.token.symbol, "OLD");
 });
+
+test("GET /api/tokens hides DEAD launches from the feed and says how many", async () => {
+  for (let i = 0; i < 6; i++) saveReport(`0x${(0xe0 + i).toString(16).padStart(40, "0")}`, { token: { symbol: `L${i}` }, fletchScore: { overall: 50 }, risk: { level: "LOW" }, signals: [] });
+  saveReport(`0x${(0xef).toString(16).padStart(40, "0")}`, { token: { symbol: "DEADCAT" }, fletchScore: { overall: 99 }, risk: { level: "HIGH" }, signals: [], status: "DEAD" });
+  const body = await (await fetch(`${baseUrl}/api/tokens`)).json();
+  assert.equal(body.tokens.some((t: { symbol: string }) => t.symbol === "DEADCAT"), false);
+  assert.ok(body.deadHidden >= 1);
+});

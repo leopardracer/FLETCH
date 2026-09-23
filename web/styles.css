@@ -912,3 +912,7 @@ footer { max-width: 900px; margin: 0 auto; line-height: 1.6; }
   .brand-cat, .brand-cat.hop, .ai-card .loading-cat, .loading-cat, .ai-mark.alert, .state-cat img, .state-cat .zz, .ask-fab img, .cat-walker { animation: none !important; }
   .cat-walker { display: none; }
 }
+
+.dead-note { display: flex; align-items: center; gap: 10px; margin: 12px 4px 0; font-size: 13px; color: var(--ink-faint); }
+.dead-note img { width: 22px; height: auto; image-rendering: pixelated; opacity: .6; filter: grayscale(1); }
+.dead-chip { font-family: var(--mono); font-size: 12px; font-weight: 600; vertical-align: middle; color: var(--ink-faint); border: 1px dashed var(--ink-faint); border-radius: 6px; padding: 2px 8px; margin-left: 8px; }
