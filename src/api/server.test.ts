@@ -361,3 +361,9 @@ test("GET /api/tokens builds the feed from stored reports once there are enough 
   const scores = body.tokens.map((r: { fletchScore: number | null }) => r.fletchScore ?? -1);
   assert.deepEqual(scores, [...scores].sort((a: number, b: number) => b - a));
 });
+
+test("GET /healthz is a pure liveness check — 200 with no chain read, even with no RPC configured", async () => {
+  const res = await fetch(`${baseUrl}/healthz`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+});

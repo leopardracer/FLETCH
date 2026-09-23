@@ -127,6 +127,7 @@ export function createServer(options?: {
   chatRateLimit?: { windowMs: number; limit: number };
 }) {
   const app = express();
+  if (config.trustProxy > 0) app.set("trust proxy", config.trustProxy);
   app.use(cors());
   app.use(express.json());
 
@@ -178,6 +179,12 @@ export function createServer(options?: {
       return;
     }
     next();
+  });
+
+  // Liveness for the hosting platform: the process is up and serving. No chain
+  // read on purpose — a slow RPC must never get a healthy process restarted.
+  app.get("/healthz", (_req, res) => {
+    res.json({ ok: true });
   });
 
   app.get("/api/health", asyncRoute(async (_req, res) => {

@@ -1,0 +1,11 @@
+node_modules
+dist
+*.db
+*.db-*
+.env
+.git
+site
+assets
+docs
+coverage
+*.log

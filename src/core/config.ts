@@ -25,6 +25,9 @@ const envSchema = z.object({
   SIGNAL_WINDOW_BLOCKS: z.coerce.number().default(50_000),
   WHALE_THRESHOLD_TOKENS: z.coerce.number().default(1_000_000),
   PORT: z.coerce.number().default(8787),
+  // Behind a hosting proxy (Railway, Fly, nginx) set to 1 so rate limits apply
+  // per visitor, not to the proxy's single IP (which would throttle everyone together).
+  TRUST_PROXY: z.coerce.number().default(0),
   DB_PATH: z.string().optional().default("./fletch.db"),
   ENABLE_POLLER: zBooleanEnv(true),
   POLL_INTERVAL_MS: z.coerce.number().default(300_000), // 5 min — see docs/ARCHITECTURE.md on why this isn't more aggressive against a shared public RPC
@@ -102,6 +105,7 @@ export const config = {
   signalWindowBlocks: BigInt(env.SIGNAL_WINDOW_BLOCKS),
   whaleThresholdTokens: env.WHALE_THRESHOLD_TOKENS,
   port: env.PORT,
+  trustProxy: env.TRUST_PROXY,
   dbPath: env.DB_PATH,
   enablePoller: env.ENABLE_POLLER,
   pollIntervalMs: env.POLL_INTERVAL_MS,

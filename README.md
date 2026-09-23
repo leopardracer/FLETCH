@@ -301,6 +301,10 @@ Free FLETCH PFPs and stickers — use them anywhere: your avatar, replies on X, 
 
 **[Download the full kit (.zip)](./site/brand/fletch-community-kit.zip)** · individual files in [`site/brand/`](./site/brand/) · also on [getfletch.xyz](https://getfletch.xyz/#community).
 
+## Deploy
+
+One process (API + dashboard + monitoring) with a SQLite file on a persistent volume. Ready for Railway out of the box — `Dockerfile` + `railway.json`; step-by-step in [docs/DEPLOY.md](./docs/DEPLOY.md).
+
 ## Built on
 
 | Source | What was used |
