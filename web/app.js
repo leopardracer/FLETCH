@@ -146,7 +146,11 @@ function availabilityBadge(state) {
  *   error       — something actually broke.
  */
 function stateBlock(kind, title, body) {
-  return `<div class="state-block state-${kind}"><div class="state-title">${title}</div>${body ? `<div class="state-body">${body}</div>` : ""}</div>`;
+  // Nothing to show yet → the cat naps next to it (empty / pending only; errors stay plain).
+  const cat = kind === "empty" || kind === "pending"
+    ? `<div class="state-cat" aria-hidden="true"><img src="mascot.png" alt="" /><span class="zz">z</span><span class="zz z2">z</span></div>`
+    : "";
+  return `<div class="state-block state-${kind}${cat ? " has-cat" : ""}">${cat}<div><div class="state-title">${title}</div>${body ? `<div class="state-body">${body}</div>` : ""}</div></div>`;
 }
 
 /**
@@ -191,7 +195,10 @@ async function loadMarketBrief(slotId) {
   try {
     const [b] = await Promise.all([getJSON("/api/brief"), getJSON("/api/tokens").then((t) => learnSymbols(t.tokens)).catch(() => {})]);
     const el = document.getElementById(slotId);
-    if (el) el.innerHTML = aiCard("FLETCH AI market brief, last hour", b.summary, { facts: b.facts });
+    if (el) {
+      el.innerHTML = aiCard("FLETCH AI market brief, last hour", b.summary, { facts: b.facts });
+      if ((b.facts || []).some((f) => /\bCRITICAL\b/.test(f))) catAlert(el.querySelector(".ai-mark"));
+    }
   } catch {
     const el = document.getElementById(slotId);
     if (el) el.innerHTML = "";
@@ -252,6 +259,8 @@ async function checkHealth() {
     if (h.ok) {
       pip.classList.add("ok");
       text.textContent = `live · block ${Number(h.chain.blockNumber).toLocaleString("en-US")}`;
+      if (lastBlockSeen !== null && h.chain.blockNumber !== lastBlockSeen) catHop(document.querySelector(".brand-cat"));
+      lastBlockSeen = h.chain.blockNumber;
     } else {
       pip.classList.add("bad");
       text.textContent = `chain unreachable: ${h.chain.reason || "check RPC_URL"}`;
@@ -1156,4 +1165,91 @@ function route() {
 
 window.addEventListener("hashchange", route);
 checkHealth();
+setInterval(checkHealth, 20000); // live block number — the header cat hops on each new one
+initMascot();
 route();
+
+
+/* ================= the FLETCH cat =================
+ * Small, deliberate motion — the cat reacts to real things (a new block, a
+ * CRITICAL finding, an empty list) rather than animating for its own sake.
+ * Everything respects prefers-reduced-motion (see styles.css).
+ */
+let lastBlockSeen = null;
+const CAT_LINES = [
+  "reading the chain…",
+  "0 guesses made today.",
+  "snipers? noted.",
+  "every number here is on-chain.",
+  "i don't predict. i read.",
+  "same block again? suspicious.",
+  "nothing here is invented.",
+];
+
+function catHop(el) {
+  if (!el) return;
+  el.classList.remove("hop");
+  void el.offsetWidth; // restart the animation
+  el.classList.add("hop");
+}
+
+function catAlert(el) {
+  if (!el) return;
+  el.classList.add("alert");
+  const wrap = el.parentElement;
+  if (wrap && !wrap.querySelector(".cat-bang")) {
+    const b = document.createElement("span");
+    b.className = "cat-bang";
+    b.textContent = "!";
+    wrap.insertBefore(b, el.nextSibling);
+  }
+}
+
+function catSay(text) {
+  const brand = document.querySelector(".brand");
+  if (!brand) return;
+  let bubble = document.getElementById("cat-say");
+  if (!bubble) {
+    bubble = document.createElement("span");
+    bubble.id = "cat-say";
+    bubble.className = "cat-say";
+    brand.appendChild(bubble);
+  }
+  bubble.textContent = text;
+  bubble.classList.remove("on");
+  void bubble.offsetWidth;
+  bubble.classList.add("on");
+  clearTimeout(catSay._t);
+  catSay._t = setTimeout(() => bubble.classList.remove("on"), 2600);
+}
+
+function catWalk() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (document.querySelector(".cat-walker")) return;
+  const w = document.createElement("div");
+  w.className = "cat-walker";
+  w.setAttribute("aria-hidden", "true");
+  w.innerHTML = `<img src="mascot.png" alt="" />`;
+  document.body.appendChild(w);
+  w.addEventListener("animationend", () => w.remove());
+}
+
+function initMascot() {
+  const cat = document.querySelector(".brand-cat");
+  if (cat) {
+    cat.addEventListener("click", (e) => {
+      e.preventDefault();
+      catHop(cat);
+      catSay(CAT_LINES[Math.floor(Math.random() * CAT_LINES.length)]);
+    });
+    cat.style.cursor = "pointer";
+    cat.title = "pet the cat";
+  }
+  // Once per visit, a little while in, the cat strolls along the bottom of the page.
+  if (!sessionStorage.getItem("fletch-cat-walked")) {
+    setTimeout(() => {
+      catWalk();
+      try { sessionStorage.setItem("fletch-cat-walked", "1"); } catch {}
+    }, 9000);
+  }
+}
