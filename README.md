@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-348%20passing-D9316A?style=flat-square&labelColor=15050A">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-87.54%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-386%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-88.5%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-7-F5E8EC?style=flat-square&labelColor=15050A">
@@ -14,6 +14,8 @@
 </p>
 
 <p align="center"><b>The meme moves first. FLETCH tells you why.</b></p>
+
+<p align="center"><a href="https://app.getfletch.xyz"><b>Launch the app → app.getfletch.xyz</b></a> · <a href="https://getfletch.xyz">getfletch.xyz</a></p>
 
 ---
 
@@ -28,7 +30,7 @@ FLETCH is **not** a token screener, a trading bot, or a price predictor. There i
 
 **Product** — [Early Signals](#early-signals) · [Signal Engine](#signal-engine) · [Continuous Monitoring](#continuous-monitoring) · [Meme Radar](#meme-radar) · [FLETCH Score](#fletch-score) · [Why is it moving?](#why-is-it-moving) · [Risk Intelligence](#risk-intelligence) · [Smart Money](#smart-money) · [AI Layer](#ai-layer)
 
-**Using it** — [Architecture](#architecture) · [Quick Start](#quick-start) · [Live Data](#live-data) · [Demo](#demo)
+**Using it** — [Try it live](#try-it-live) · [Hardened on mainnet](#hardened-on-mainnet) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Deploy](#deploy) · [Live Data](#live-data) · [Demo](#demo)
 
 **Contributing** — [Tests](#tests) · [Development](#development) · [Roadmap](#roadmap) · [Community kit](#community-kit) · [Built on](#built-on) · [License](#license)
 
@@ -177,6 +179,29 @@ Per wallet, real: every curve buy/sell recorded with its exact price-at-trade, a
 
 The two server-side features degrade to "field omitted" / "chat not configured" without a key, rather than throwing or faking a response. Full writeup: [docs/AI.md](./docs/AI.md).
 
+## Try it live
+
+**[app.getfletch.xyz](https://app.getfletch.xyz)** — the full app, running 24/7 against Robinhood Chain mainnet. No sign-up, no wallet connection.
+
+- **Overview / Radar / Signals / Tokens** — hundreds of fresh Pons V2 launches monitored continuously; drained, inactive launches are marked dead and drop off the radar.
+- **Token pages** — FLETCH Score, risk with evidence, lifetime holders, signal lifecycle, every tx and address linked to the [Robinhood Chain explorer](https://robinhoodchain.blockscout.com).
+- **Wallets** — realized/unrealized PnL, win rate, entry timing, holding period and linked wallets from recorded curve trades.
+- **Ask FLETCH AI** — bring your own Anthropic key; it stays in your browser tab and never reaches the server.
+
+## Hardened on mainnet
+
+Running FLETCH against real Robinhood Chain mainnet data surfaced problems no fixture would have. Each is fixed and pinned by a regression test built from the real transactions that exposed it:
+
+| Found live | Fixed |
+|---|---|
+| The chain makes ~14,000 blocks an hour, so a 20,000-block lookback forgot every token older than ~1.4h | Every launch FLETCH sees is stored forever; holders and trades are tracked **incrementally from launch**, lifetime-exact at any age |
+| The token's own bonding curve counted as a holder → "1 holder, top 10 own 100%" | The curve, zero address and pass-through contracts are never holders |
+| The mint into the curve read as a 1,000,000,000-token "sell" | Mints and burns are never whale moves |
+| Trades routed wallet → router → curve were credited to the router (115 of 1,147 trades) | Trades are attributed to the real wallet by the token flow inside the tx |
+| With < 10 holders, "top 10 own 100%" is arithmetic, not risk | Reported honestly as "only N holders so far" |
+| Dead launches re-emitted "liquidity is only $0" and topped the radar | Drained + inactive → `DEAD`: off the radar and feed, re-checked every 6h in case it revives |
+| Pages re-read the chain on every view and hit the public RPC's rate limit | Reports are stored by monitoring and served instantly; a failed live read falls back to the last report, marked stale |
+
 ## Architecture
 
 `chain/` (raw Robinhood Chain + Pons V2 reads) → `data/` (the `ChainDataProvider` abstraction) → `persistence/` (SQLite snapshot/signal history) + `risk/` + `signals/` + `scoring/` + `ai/` (pure, unit-tested logic where possible) → `api/` (Express) → `web/` (dashboard).
@@ -192,20 +217,22 @@ git clone https://github.com/leopardracer/FLETCH.git
 cd FLETCH
 npm install
 cp .env.example .env
-# edit .env — at minimum, set RPC_URL (see .env.example for where to get one)
-npm run dev
+# in .env — Robinhood Chain's free public RPC, no key needed:
+#   RPC_URL=https://rpc.mainnet.chain.robinhood.com
+#   LOG_SCAN_CHUNK_BLOCKS=10000
+ENABLE_POLLER=true npm run dev
 # open http://localhost:8787
 ```
 
-`RPC_URL` is required — there's no default baked in, on purpose (see `src/core/config.ts`). Full environment variable reference and what each optional one unlocks: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+`RPC_URL` is required — there's no default baked in, on purpose (see `src/core/config.ts`). The public endpoint serves 50,000-block log ranges in one call, so keep `LOG_SCAN_CHUNK_BLOCKS` large; set `MAX_CONCURRENT_TOKENS=2`–`3` to stay under its rate limit (FLETCH pauses and resumes on its own if it's hit). Full environment variable reference: [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md). To host your own instance: [docs/DEPLOY.md](./docs/DEPLOY.md).
 
 ## Live Data
 
 FLETCH reads Robinhood Chain directly — no seed data, no fixtures shipped in the repo. What's real today versus what's `unavailable` and why: [docs/DATA.md](./docs/DATA.md). Short version:
 
-**Real:** new-token discovery, launch risk signals, holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Whale Activity/Safety), risk levels with evidence, persisted snapshot + signal history, trend-based signals and risk findings once history exists.
+**Real:** new-token discovery with a permanent launch registry, launch risk signals, lifetime holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Whale Activity/Safety), risk levels with evidence, signal lifecycle, per-wallet curve trades with realized/unrealized PnL, win rate, entry timing, holding period and linked wallets, dead-launch detection.
 
-**Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, Smart Money win-rate/PnL (the participation record is real; PnL isn't — see [docs/DATA.md](./docs/DATA.md#smart-money)), Social signal.
+**Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, PnL for tokens paired with something other than native ETH (units aren't mixed), Social signal. See [docs/DATA.md](./docs/DATA.md).
 
 ## Demo
 
@@ -224,8 +251,8 @@ npm test
 ```
 
 ```
-tests 348
-pass 348
+tests 386
+pass 386
 fail 0
 ```
 
@@ -237,7 +264,7 @@ npm run test:coverage
 all files   |  87.54 |    87.26 |   74.27 |
 ```
 
-87.54% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+88.5% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
 npm run test:integration   # the five test files that exercise multiple layers together —
@@ -260,7 +287,7 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 ## Roadmap
 
 <details>
-<summary>Priority order, 9 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
+<summary>Priority order, 12 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
 1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
 2. ~~Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot~~ — **done**
@@ -271,6 +298,9 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 7. ~~Batch per-launch RPC calls via multicall~~ — **done, opt-in**: set a verified `MULTICALL3_ADDRESS`
 8. ~~Automatic reactivation of a `FAILED` monitored token after a cool-off~~ — **done**, plus RPC rate-limit backoff that never penalizes tokens
 9. ~~A real DETECTED→STRENGTHENING→FADING signal lifecycle~~ — **done**, derived at read time, on Radar and every token
+10. ~~Host it~~ — **done**: live at [app.getfletch.xyz](https://app.getfletch.xyz) (Railway, persistent volume, public RPC)
+11. ~~Remember every launch; incremental holders and trades~~ — **done**: see [Hardened on mainnet](#hardened-on-mainnet)
+12. ~~Dead-launch detection~~ — **done**: drained + inactive launches leave the radar and feed, re-checked every 6h
 
 </details>
 

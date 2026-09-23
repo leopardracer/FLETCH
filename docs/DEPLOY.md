@@ -29,6 +29,7 @@ Service → **Variables**:
 | `ENABLE_POLLER` | `true` | continuous discovery + monitoring |
 | `LOG_SCAN_CHUNK_BLOCKS` | `10000` | the public RPC serves 50k-block log ranges in one call |
 | `MAX_CONCURRENT_TOKENS` | `3` | what the public RPC sustains |
+| `RAILWAY_RUN_UID` | `0` | Railway mounts volumes owned by root; the image runs as a non-root user, so without this FLETCH logs `unable to open database file` |
 
 Already set by the image — don't add: `PORT` (Railway overrides it and FLETCH
 reads it), `DB_PATH=/data/fletch.db`, `TRUST_PROXY=1` (rate limits per visitor,
