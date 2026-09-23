@@ -803,7 +803,7 @@
       ROADMAP FLETCH
     </div>
     <p style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin:0 0 24px;max-width:620px;">
-      Phases 1, 3 and 4 are shipped, and FLETCH is live at app.getfletch.xyz — hardened against real mainnet data. Phase 2's code is written and waiting on one named thing outside FLETCH; Phase 5 needs an outside data provider.
+      Phases 1–4 are shipped, and FLETCH is live at app.getfletch.xyz — hardened against real mainnet data. Phase 5 needs an outside data provider.
     </p>
 
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
@@ -850,15 +850,15 @@
       <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Real data found real bugs, and each is fixed with a regression test: every launch is remembered (the chain makes ~14,000 blocks an hour), holders are lifetime-exact at any age, trades routed through contracts are credited to the real wallet, tiny tokens no longer read "top 10 own 100%", and drained, inactive launches drop off the radar.</p>
     </div>
 
-    <div class="card" style="padding:16px 20px;margin-bottom:10px;">
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 2</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;">BLOCKSCOUT, LIVE</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">FAST CHAIN READS AT SCALE</div>
         </div>
-        <span class="chip chip-medium" style="flex:none;">CODE DONE · WAITING ON BLOCKSCOUT</span>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
       </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Code is written, RPC key is live — Blockscout's own PRO API returns Unauthorized for chain_id=4663 specifically (confirmed against multiple endpoint shapes, including their own Robinhood Chain quick-start example) despite the chain being listed as supported and the same key working fine on chain_id=1. Reported to Blockscout; picks back up once that's resolved on their end.</p>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">The goal was reading hundreds of launches without hitting RPC limits. Done without a paid indexer: Robinhood Chain's public RPC serves 50,000-block log ranges in one call, every launch is stored once in a permanent registry, and holders and trades are tracked incrementally from launch — so the full history is never re-read. The Blockscout provider stays in the code as an optional accelerator for later.</p>
     </div>
 
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">

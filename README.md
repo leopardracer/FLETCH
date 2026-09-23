@@ -289,7 +289,7 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 <details>
 <summary>Priority order, 12 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
-1. Verify the Blockscout provider against a live API key; wire it into the feed to cut per-token RPC round-trips
+1. ~~Cut per-token RPC round-trips at scale~~ — **done without an indexer**: public RPC with 50k-block log ranges, a permanent launch registry and incremental holder/trade tracking. The Blockscout provider remains as an optional accelerator (its PRO API still rejects chain 4663)
 2. ~~Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot~~ — **done**
 3. Evaluate Bitquery for Uniswap v4 pricing and decoded trade history — a provider swap, not a rewrite
 4. ~~Record price-at-trade in wallet activity — the specific piece blocking real Smart Money PnL/win-rate~~ — **done**: real realized PnL and win rate per wallet, see [docs/DATA.md](./docs/DATA.md#smart-money)
