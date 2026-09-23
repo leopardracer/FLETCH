@@ -91,7 +91,17 @@ export function analyzeRisk(
   }
 
   if (metrics) {
-    if (metrics.topHolderConcentrationPercent !== null) {
+    // Found live: with fewer than 10 holders the "top 10" IS everyone, so the
+    // share is 100% by arithmetic — a false CRITICAL on most fresh or dead
+    // launches, drowning the real concentration cases on the radar. Below 10
+    // holders FLETCH reports the holder count itself, honestly and lower.
+    if (metrics.holderCount !== null && metrics.holderCount < 10) {
+      findings.push({
+        level: "MEDIUM",
+        code: "HOLDER_CONCENTRATION",
+        evidence: `only ${metrics.holderCount} holder${metrics.holderCount === 1 ? "" : "s"} so far — too few for a top-10 share to mean anything`,
+      });
+    } else if (metrics.topHolderConcentrationPercent !== null) {
       const c = metrics.topHolderConcentrationPercent;
       if (c > 70) findings.push({ level: "CRITICAL", code: "HOLDER_CONCENTRATION", evidence: `top 10 holders own ${c.toFixed(0)}% of tracked supply` });
       else if (c > 50) findings.push({ level: "HIGH", code: "HOLDER_CONCENTRATION", evidence: `top 10 holders own ${c.toFixed(0)}% of tracked supply` });

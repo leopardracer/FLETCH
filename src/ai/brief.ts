@@ -85,7 +85,7 @@ export function buildMarketBriefFacts(input: MarketBriefInput): string[] {
   for (const [i, e] of input.radar.slice(0, 3).entries()) {
     const risk = e.riskLevel ? `risk level ${e.riskLevel}` : "risk level not yet computed";
     facts.push(
-      `Radar #${i + 1}: token ${shortAddress(e.token)} — ${e.topSignal.explanation} (${e.topSignal.evidence}); ` +
+      `Radar #${i + 1}: token ${shortAddress(e.token)} — ${e.topSignal.explanation}${e.topSignal.evidence && e.topSignal.evidence !== e.topSignal.explanation ? ` (${e.topSignal.evidence})` : ""}; ` +
         `${e.distinctSignalTypes} distinct signal type(s) converging, ${risk}` +
         (e.topSignalLifecycle ? `; that signal is ${e.topSignalLifecycle.stage} (${e.topSignalLifecycle.recentCount} in the last window vs ${e.topSignalLifecycle.previousCount} before).` : ".")
     );

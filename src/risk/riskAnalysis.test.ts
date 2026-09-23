@@ -144,3 +144,16 @@ test("liquidity deterioration still fires normally when the phase is unchanged",
   const r = analyzeRisk(null, m, prevSameGraduated);
   assert.ok(r.findings.some((f) => f.code === "LIQUIDITY_DETERIORATION"));
 });
+
+test("REGRESSION (live): fewer than 10 holders is reported as a holder count, not a false 'top 10 own 100%' CRITICAL", () => {
+  const r = analyzeRisk(null, metrics({ holderCount: 3, topHolderConcentrationPercent: 100 }));
+  const f = r.findings.find((x) => x.code === "HOLDER_CONCENTRATION")!;
+  assert.equal(f.level, "MEDIUM");
+  assert.match(f.evidence, /^only 3 holders so far/);
+  assert.equal(r.findings.some((x) => /top 10 holders own/.test(x.evidence)), false);
+});
+
+test("10 or more holders: real concentration still escalates to CRITICAL", () => {
+  const r = analyzeRisk(null, metrics({ holderCount: 40, topHolderConcentrationPercent: 82 }));
+  assert.equal(r.findings.find((x) => x.code === "HOLDER_CONCENTRATION")!.level, "CRITICAL");
+});

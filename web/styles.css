@@ -779,7 +779,7 @@ button#chat-send:disabled {
 .brand-cat { width: 40px; height: auto; image-rendering: pixelated; filter: drop-shadow(0 4px 10px rgba(255,45,122,0.35)); transition: transform .2s ease; }
 .brand:hover .brand-cat { transform: translateY(-3px) rotate(-3deg); }
 .brand-text { display: flex; flex-direction: column; gap: 4px; }
-.brand-word { display: block; height: 22px; width: auto; }
+.brand-word { display: block; height: 22px; width: auto; align-self: flex-start; object-fit: contain; }
 .tagline { font-size: 12.5px; color: var(--ink-faint); }
 .status { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px 7px 12px; color: var(--ink); }
 .status .pip.ok { background: var(--green); box-shadow: 0 0 10px var(--green); animation: fl-pulse 1.8s ease-in-out infinite; }
