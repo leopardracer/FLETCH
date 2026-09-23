@@ -803,7 +803,7 @@
       ROADMAP FLETCH
     </div>
     <p style="font-size:13.5px;line-height:1.6;color:var(--ink-dim);margin:0 0 24px;max-width:620px;">
-      Phases 1–4 are shipped, and FLETCH is live at app.getfletch.xyz — hardened against real mainnet data. Phase 5 needs an outside data provider.
+      Phases 1–7 are shipped, and FLETCH is live at app.getfletch.xyz — hardened against real mainnet data. Phase 8 needs an outside data provider.
     </p>
 
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
@@ -820,51 +820,7 @@
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">ADDED</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">FLETCH AI</div>
-        </div>
-        <span class="chip chip-low" style="flex:none;">DONE</span>
-      </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Market brief, token analyst, wallet read, and an Ask FLETCH AI chat with five read-only tools — all built only on facts FLETCH itself computed, never on raw chain data or a guess. Server key or bring your own. docs/AI.md</p>
-    </div>
-
-    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
-        <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">ADDED</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">LIVE AT APP.GETFLETCH.XYZ</div>
-        </div>
-        <span class="chip chip-low" style="flex:none;">DONE</span>
-      </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">The full app — dashboard, radar, AI, monitoring — running 24/7 on Robinhood Chain's free public RPC, with its history on a persistent volume. Deploy config for your own instance ships in the repo.</p>
-    </div>
-
-    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
-        <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">ADDED</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">HARDENED ON MAINNET</div>
-        </div>
-        <span class="chip chip-low" style="flex:none;">DONE</span>
-      </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Real data found real bugs, and each is fixed with a regression test: every launch is remembered (the chain makes ~14,000 blocks an hour), holders are lifetime-exact at any age, trades routed through contracts are credited to the real wallet, tiny tokens no longer read "top 10 own 100%", and drained, inactive launches drop off the radar.</p>
-    </div>
-
-    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
-        <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 2</div>
-          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">FAST CHAIN READS AT SCALE</div>
-        </div>
-        <span class="chip chip-low" style="flex:none;">DONE</span>
-      </div>
-      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">The goal was reading hundreds of launches without hitting RPC limits. Done without a paid indexer: Robinhood Chain's public RPC serves 50,000-block log ranges in one call, every launch is stored once in a permanent registry, and holders and trades are tracked incrementally from launch — so the full history is never re-read. The Blockscout provider stays in the code as an optional accelerator for later.</p>
-    </div>
-
-    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
-        <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 3</div>
           <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">A TRUE BASELINE</div>
         </div>
         <span class="chip chip-low" style="flex:none;">DONE</span>
@@ -875,7 +831,7 @@
     <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 4</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 3</div>
           <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">PRICE-AT-TRADE, REAL PNL</div>
         </div>
         <span class="chip chip-low" style="flex:none;">DONE</span>
@@ -883,10 +839,54 @@
       <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Every curve buy and sell is recorded per wallet with its exact price-at-trade — real realized and unrealized PnL, win rate, entry timing, holding period and linked wallets, computed only over history FLETCH saw from launch. Zero extra RPC calls. docs/DATA.md</p>
     </div>
 
-    <div class="card" style="padding:16px 20px;margin-bottom:10px;">
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 4</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">FLETCH AI</div>
+        </div>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Market brief, token analyst, wallet read, and an Ask FLETCH AI chat with five read-only tools — all built only on facts FLETCH itself computed, never on raw chain data or a guess. Server key or bring your own. docs/AI.md</p>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
         <div>
           <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 5</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">FAST CHAIN READS AT SCALE</div>
+        </div>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">The goal was reading hundreds of launches without hitting RPC limits. Done without a paid indexer: Robinhood Chain's public RPC serves 50,000-block log ranges in one call, every launch is stored once in a permanent registry, and holders and trades are tracked incrementally from launch — so the full history is never re-read. The Blockscout provider stays in the code as an optional accelerator for later.</p>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 6</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">HARDENED ON MAINNET</div>
+        </div>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">Real data found real bugs, and each is fixed with a regression test: every launch is remembered (the chain makes ~14,000 blocks an hour), holders are lifetime-exact at any age, trades routed through contracts are credited to the real wallet, tiny tokens no longer read "top 10 own 100%", and drained, inactive launches drop off the radar.</p>
+    </div>
+
+    <div class="card" style="border-left:3px solid var(--success);padding:16px 20px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 7</div>
+          <div style="font-family:var(--sans);font-weight:700;font-size:17px;color:var(--success);">LIVE AT APP.GETFLETCH.XYZ</div>
+        </div>
+        <span class="chip chip-low" style="flex:none;">DONE</span>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--ink-dim);">The full app — dashboard, radar, AI, monitoring — running 24/7 on Robinhood Chain's free public RPC, with its history on a persistent volume. Deploy config for your own instance ships in the repo.</p>
+    </div>
+
+    <div class="card" style="padding:16px 20px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;">PHASE 8</div>
           <div style="font-family:var(--sans);font-weight:700;font-size:17px;">POST-GRADUATION PRICING</div>
         </div>
         <span class="chip" style="border-color:var(--line);color:var(--ink-dim);flex:none;">PLANNED</span>
