@@ -57,6 +57,58 @@ function fmtAddr(a) {
   return a.slice(0, 6) + "…" + a.slice(-4);
 }
 
+/** Robinhood Chain mainnet explorer (Blockscout). */
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+
+/** Short address → $SYMBOL, learned from any feed the page has loaded. The
+ *  market brief deliberately names tokens by short address (deployer-chosen
+ *  names never reach the AI); the UI swaps the symbol back in for people. */
+const symbolByShort = new Map();
+function learnSymbols(rows) {
+  for (const r of rows || []) if (r && r.token && r.symbol) symbolByShort.set(fmtAddr(r.token).toLowerCase(), r.symbol);
+}
+
+/**
+ * Escapes, then makes chain text readable: full tx hashes and addresses
+ * become short explorer links, a leading [LEVEL] becomes a severity chip,
+ * and known short token addresses show their $SYMBOL. Everything is escaped
+ * first — this only ever wraps FLETCH's own text in known-safe markup.
+ */
+function richText(v) {
+  let s = esc(v);
+  let level = null;
+  s = s.replace(/^\[(LOW|MEDIUM|HIGH|CRITICAL)\]\s*/, (_, l) => { level = l; return ""; });
+  s = s.replace(/\b0x[0-9a-fA-F]{64}\b/g, (h) => `<a class="hash" href="${EXPLORER}/tx/${h}" target="_blank" rel="noopener" title="${h}">${fmtAddr(h)}</a>`);
+  s = s.replace(/\b0x[0-9a-fA-F]{40}\b/g, (a) => `<a class="hash" href="${EXPLORER}/address/${a}" target="_blank" rel="noopener" title="${a}">${fmtAddr(a)}</a>`);
+  s = s.replace(/\b0x[0-9a-fA-F]{4}…[0-9a-fA-F]{4}\b/g, (short) => {
+    const sym = symbolByShort.get(short.toLowerCase());
+    return sym ? `<span class="sym-inline" title="${short}">$${esc(sym)}</span>` : short;
+  });
+  return { html: s, level };
+}
+
+/** A fact as a list item: severity dot (from a [LEVEL] prefix or a level named in the text) + readable text. */
+function factItem(text) {
+  const r = richText(text);
+  const lvl = r.level || (String(text).match(/\b(CRITICAL|HIGH|MEDIUM|LOW)\b/) || [])[1] || null;
+  return `<li class="fact"><span class="why-dot ${lvl ? "sev-" + lvl : ""}"></span><span>${r.level ? severityChip(r.level) + " " : ""}${r.html}</span></li>`;
+}
+
+function fmtUsd(v) {
+  if (v === null || v === undefined) return "—";
+  if (v >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+  if (v >= 1e3) return "$" + (v / 1e3).toFixed(1) + "k";
+  return "$" + Math.round(v);
+}
+
+function fmtAge(unixSeconds) {
+  if (!unixSeconds) return "—";
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - unixSeconds);
+  if (s < 3600) return Math.max(1, Math.floor(s / 60)) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h";
+  return Math.floor(s / 86400) + "d";
+}
+
 function fmtTime(unixSeconds) {
   const d = new Date(unixSeconds * 1000);
   return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
@@ -111,17 +163,24 @@ function aiCard(title, summary, opts = {}) {
     opts.facts && opts.facts.length
       ? `<details class="ai-facts"><summary>What it was given</summary><ul>${opts.facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></details>`
       : "";
+  // No AI on this instance: the facts ARE the content — show them as a clean,
+  // scannable list (severity dots, $SYMBOLs, short explorer links) instead of
+  // one run-on paragraph of the same sentences.
+  const body =
+    !isLLM && opts.facts && opts.facts.length
+      ? `<ul class="fact-list">${opts.facts.slice(0, 8).map(factItem).join("")}</ul>`
+      : `<p class="ai-text">${richText(summary ? summary.text : "").html}</p>`;
   return `
     <section class="ai-card${isLLM ? " ai-live" : ""}">
-      <div class="ai-head"><img src="favicon.png" alt="" class="ai-mark" /><span>${esc(title)}</span></div>
-      <p class="ai-text">${esc(summary ? summary.text : "")}</p>
+      <div class="ai-head"><img src="mascot.png" alt="" class="ai-mark" /><span>${esc(title)}</span>${isLLM ? `<span class="ai-badge">AI</span>` : `<span class="ai-badge facts">facts</span>`}</div>
+      ${body}
       <div class="ai-prov">${provenance}</div>
-      ${facts}
+      ${isLLM ? facts : ""}
     </section>`;
 }
 
 function aiCardLoading(title) {
-  return `<section class="ai-card"><div class="ai-head"><img src="favicon.png" alt="" class="ai-mark" /><span>${esc(title)}</span></div>${loadingLine("reading the chain")}</section>`;
+  return `<section class="ai-card"><div class="ai-head"><img src="mascot.png" alt="" class="ai-mark" /><span>${esc(title)}</span></div>${loadingLine("FLETCH is reading the chain")}</section>`;
 }
 
 /** Loads the Market Brief into `slotId` — never blocks the page it sits on. */
@@ -130,7 +189,7 @@ async function loadMarketBrief(slotId) {
   if (!slot) return;
   slot.innerHTML = aiCardLoading("FLETCH AI market brief");
   try {
-    const b = await getJSON("/api/brief");
+    const [b] = await Promise.all([getJSON("/api/brief"), getJSON("/api/tokens").then((t) => learnSymbols(t.tokens)).catch(() => {})]);
     const el = document.getElementById(slotId);
     if (el) el.innerHTML = aiCard("FLETCH AI market brief, last hour", b.summary, { facts: b.facts });
   } catch {
@@ -141,7 +200,7 @@ async function loadMarketBrief(slotId) {
 
 /** A small terminal-style loading indicator — a blinking cursor, not a spinner or skeleton. */
 function loadingLine(label) {
-  return `<div class="loading-line">${label || "loading"}<span class="cursor">▌</span></div>`;
+  return `<div class="loading-line"><img src="mascot.png" alt="" class="loading-cat" />${esc(label || "FLETCH is reading the chain")}<span class="cursor">▌</span></div>`;
 }
 
 async function renderLiveSignals() {
@@ -192,7 +251,7 @@ async function checkHealth() {
     const h = await getJSON("/api/health");
     if (h.ok) {
       pip.classList.add("ok");
-      text.textContent = `chain connected — block ${h.chain.blockNumber}`;
+      text.textContent = `live · block ${Number(h.chain.blockNumber).toLocaleString("en-US")}`;
     } else {
       pip.classList.add("bad");
       text.textContent = `chain unreachable: ${h.chain.reason || "check RPC_URL"}`;
@@ -551,25 +610,29 @@ async function renderFeed() {
       body.innerHTML = stateBlock("empty", "NOTHING IN THIS WINDOW", "No launches found in the scanned window. Widen the window or check back after more chain activity.");
       return;
     }
+    learnSymbols(data.tokens);
     const rows = data.tokens
       .map(
         (t) => `
       <tr onclick="location.hash='#/token/${t.token}'">
-        <td><span class="sym">${t.symbol ? "$" + esc(t.symbol) : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
-        <td class="addr">${fmtAddr(t.deployer)}</td>
-        <td>${t.devBuyPercent !== null ? t.devBuyPercent.toFixed(1) + "%" : "—"}</td>
+        <td><span class="sym">${t.symbol ? "$" + esc(t.symbol) : "unresolved"}</span> <span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
+        <td class="num-cell">${fmtAge(t.launchedAt)}</td>
+        <td class="num-cell">${fmtUsd(t.liquidityUsd)}</td>
+        <td class="num-cell">${t.holderCount ?? "—"}</td>
+        <td class="num-cell">${t.devBuyPercent !== null && t.devBuyPercent !== undefined ? t.devBuyPercent.toFixed(1) + "%" : "—"}</td>
         <td>${severityChip(t.riskLevel)}</td>
         <td>${scoreBadge(t.fletchScore)}</td>
       </tr>`
       )
       .join("");
     body.outerHTML = `
-      <table class="feed" id="feed-body">
+      <div class="table-wrap" id="feed-body">
+      <table class="feed">
         <thead>
-          <tr><th>Token</th><th>Deployer</th><th>Dev buy</th><th>Risk</th><th>FLETCH Score</th></tr>
+          <tr><th>Token</th><th>Age</th><th>Liquidity</th><th>Holders</th><th>Dev buy</th><th>Risk</th><th>FLETCH Score</th></tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table>`;
+      </table></div>`;
   } catch (e) {
     body.innerHTML = stateBlock("error", "COULDN'T LOAD THE FEED", `${e.message} — is the API running and RPC_URL configured?`);
   }
@@ -625,11 +688,12 @@ async function renderToken(address) {
       <div class="detail-head">
         <div>
           <h1>${d.token.symbol ? "$" + esc(d.token.symbol) : "Unresolved token"}</h1>
-          <div class="addr">${d.token.address}</div>
+          <div class="addr"><a class="hash" href="${EXPLORER}/token/${esc(d.token.address)}" target="_blank" rel="noopener">${esc(d.token.address)} ↗</a>${d.source === "cache" ? ` <span class="asof">${d.stale ? "stale · " : ""}updated ${fmtAge(d.asOf)} ago</span>` : ""}</div>
         </div>
         <div class="score-big">
           <div class="num">${s.overall !== null ? s.overall : "—"}</div>
           <div class="label">${s.overall !== null ? "FLETCH Score" : (s.overallUnavailableReason || "score unavailable")}</div>
+          <div class="risk-under">Risk ${severityChip(d.risk.level)}</div>
         </div>
       </div>
 
@@ -669,19 +733,19 @@ async function renderToken(address) {
 
       <div class="panel-block">
         <h2>Data availability</h2>
-        <div class="avail-grid">
-          ${Object.entries(avail).map(([k, v]) => `<div class="avail-row"><span>${k.replace(/([A-Z])/g, " $1").trim()}</span>${availabilityBadge(v)}</div>`).join("")}
+        <div class="avail-chips">
+          ${Object.entries(avail).map(([k, v]) => `<span class="avail-chip ${v === "REAL" ? "on" : ""}" title="${esc(v)}">${v === "REAL" ? "●" : "○"} ${esc(k.replace(/([A-Z])/g, " $1").trim().toLowerCase())}</span>`).join("")}
         </div>
       </div>
 
       <div class="panel-block">
         <h2>Why is it moving?</h2>
-        <ul>${d.whyIsItMoving.bullets.map((b) => `<li>${esc(b)}</li>`).join("") || "<li>Not enough data yet.</li>"}</ul>
+        <ul class="fact-list">${d.whyIsItMoving.bullets.map(factItem).join("") || "<li>Not enough data yet.</li>"}</ul>
       </div>
 
       <div class="panel-block">
         <h2>Risk — ${d.risk.level}</h2>
-        <ul>${d.whyIsItMoving.risks.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        <ul class="fact-list">${d.whyIsItMoving.risks.map(factItem).join("")}</ul>
       </div>
 
       <div class="panel-block">
@@ -699,7 +763,7 @@ async function renderToken(address) {
                   (sig) => `<div class="signal-row" style="cursor:default">
                     <div class="signal-time">${fmtTime(sig.timestamp)}</div>
                     <div class="signal-type">${severityChip(sig.severity)} <span class="signal-type-label">${sig.type.replace(/_/g, " ")}</span></div>
-                    <div class="signal-evidence">${esc(sig.evidence)}</div>
+                    <div class="signal-evidence">${richText(sig.evidence).html}</div>
                   </div>`
                 )
                 .join("")}</div>`
@@ -956,7 +1020,7 @@ function renderAskFab(route) {
     fab = document.createElement("button");
     fab.id = "ask-fab";
     fab.className = "ask-fab";
-    fab.innerHTML = `<img src="favicon.png" alt="" /><span>Ask FLETCH AI</span>`;
+    fab.innerHTML = `<img src="mascot.png" alt="" /><span>Ask FLETCH AI</span>`;
     fab.addEventListener("click", () => (location.hash = "#/chat"));
     document.body.appendChild(fab);
   }

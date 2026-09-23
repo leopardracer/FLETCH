@@ -367,3 +367,13 @@ test("GET /healthz is a pure liveness check — 200 with no chain read, even wit
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), { ok: true });
 });
+
+test("GET /api/tokens/:address falls back to an older stored report, marked stale, when the live read fails", async () => {
+  const T = "0x00000000000000000000000000000000000000c2";
+  saveReport(T, { token: { address: T, symbol: "OLD" }, whyIsItMoving: { bullets: [], risks: [], insufficientData: true } }, Math.floor(Date.now() / 1000) - 3600);
+  const res = await fetch(`${baseUrl}/api/tokens/${T}`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.stale, true);
+  assert.equal(body.token.symbol, "OLD");
+});

@@ -239,7 +239,13 @@ export function createServer(options?: {
       if (reps.length >= 5) {
         const rows = reps
           .map((r) => {
-            const rep = r.report as { token?: { symbol?: string | null }; fletchScore?: { overall?: number | null }; risk?: { level?: string }; signals?: Signal[] };
+            const rep = r.report as {
+              token?: { symbol?: string | null };
+              fletchScore?: { overall?: number | null };
+              risk?: { level?: string };
+              signals?: Signal[];
+              metrics?: { liquidityUsd?: number | null; holderCount?: number | null };
+            };
             const m = getMonitoredToken(r.token as `0x${string}`);
             return {
               token: r.token,
@@ -250,6 +256,9 @@ export function createServer(options?: {
               riskLevel: rep.risk?.level ?? null,
               fletchScore: rep.fletchScore?.overall ?? null,
               topSignal: rep.signals && rep.signals.length ? pickTopSignal(rep.signals) : null,
+              liquidityUsd: rep.metrics?.liquidityUsd ?? null,
+              holderCount: rep.metrics?.holderCount ?? null,
+              launchedAt: m?.launch?.launchTimestamp ?? null,
               asOf: r.takenAt,
             };
           })
@@ -349,8 +358,9 @@ export function createServer(options?: {
         body = { ...(bigIntSafe(intel) as unknown as Record<string, unknown>), source: "live", asOf: now };
         why = intel.whyIsItMoving;
       } catch (e: unknown) {
-        // Rate-limited with an older report on file: serve it, clearly marked stale.
-        if (stored && isRpcRateLimitError(e)) {
+        // Live read failed (rate limit, RPC outage, timeout) but an older report
+        // is on file: serve it, clearly marked stale, instead of an error page.
+        if (stored) {
           body = { ...stored.report, source: "cache", stale: true, asOf: stored.takenAt };
           why = stored.report.whyIsItMoving as WhyIsItMoving;
         } else throw e;

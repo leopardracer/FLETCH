@@ -3,23 +3,27 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FLETCH — meme intelligence, Robinhood Chain</title>
+<title>FLETCH — the AI on-chain analyst for Robinhood Chain</title>
+<meta name="theme-color" content="#0A0A0E" />
 <link rel="icon" href="favicon.png" />
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="topbar">
-    <div>
-      <img src="logo-header.png" alt="FLETCH" class="logo" height="28" />
-      <div class="tagline">what's happening, why, and whether to pay attention — Robinhood Chain</div>
-    </div>
+  <header class="topbar">
+    <a class="brand" href="#/overview" aria-label="FLETCH home">
+      <img src="mascot.png" alt="" class="brand-cat" width="40" height="40" />
+      <span class="brand-text">
+        <img src="wordmark.png" alt="FLETCH" class="brand-word" height="22" />
+        <span class="tagline">What's happening on Robinhood Chain, why, and whether to care.</span>
+      </span>
+    </a>
     <div class="status" id="status">
       <span class="pip" id="status-pip"></span>
       <span id="status-text">connecting…</span>
     </div>
-  </div>
+  </header>
   <nav id="navbar" class="navbar"></nav>
 
   <main id="app"></main>
