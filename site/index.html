@@ -343,7 +343,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 @keyframes floatUp{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:.9}100%{transform:translateY(-110vh) rotate(180deg);opacity:0}}
 @keyframes burst{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 @keyframes rowIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
-@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}
 @keyframes blink{0%,92%,100%{opacity:1}95%{opacity:.2}}
 
 /* reading progress under the nav */
@@ -373,9 +372,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 .live:not(.stale):not(.off) span{animation:blink 2.4s steps(1) infinite}
 .rows li.slide{animation:rowIn .45s cubic-bezier(.2,.8,.2,1) both}
 
-/* a scan line passes over the numbers band */
-.numbers{position:relative;overflow:hidden}
-.numbers::after{content:"";position:absolute;top:0;bottom:0;left:0;width:160px;background:linear-gradient(90deg,transparent,rgba(255,45,122,.14),transparent);animation:sweep 7s linear infinite;pointer-events:none}
 
 /* "what it reads": a pink bar grows under the term you point at */
 .reads dt{position:relative;display:inline-block}
@@ -433,7 +429,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   .js [data-reveal],.js [data-stagger] > *,.js .hero .lede,.js .hero .ctas,.js .hero .note,.js .tape,.js .final .cat{opacity:1!important;transform:none!important}
   .js .hero h1 span > i{transform:none!important}
   .ticker .track{white-space:normal;flex-wrap:wrap}
-  .pixels,.numbers::after,.progress{display:none}
+  .pixels,.progress{display:none}
   .js .hero h1 .l2 i{color:var(--blush);background:none}
 }
 </style>
