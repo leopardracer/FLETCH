@@ -370,7 +370,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
         </button>
       </div>
       <b id="ca-value">Not launched</b>
-      <p id="ca-note">FLETCH doesn't fabricate an address any more than it fabricates a chain read. Copy turns on the moment the real one is here.</p>
+      <p id="ca-note" hidden></p>
     </div>
   </div>
 </section>
@@ -670,6 +670,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
     box.classList.add("ca-live");
     $("ca-value").innerHTML = '<a href="https://robinhoodchain.blockscout.com/token/' + ca + '" target="_blank" rel="noopener">' + ca + "</a>";
     $("ca-note").textContent = "The only real $FLETCH address. Check it against the GitHub repository before you trust it anywhere else.";
+    $("ca-note").hidden = false;
     btn.disabled = false;
     btn.addEventListener("click", function () {
       function ok() { label.textContent = "Copied"; btn.classList.add("done"); setTimeout(function () { label.textContent = "Copy"; btn.classList.remove("done"); }, 1600); }
