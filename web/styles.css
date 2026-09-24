@@ -1138,3 +1138,14 @@ footer nav a{display:inline-flex;align-items:center;gap:7px}
 .gh-link .gh{vertical-align:0}
 .gh-btn{display:inline-flex;align-items:center;gap:8px;align-self:flex-end;white-space:nowrap;text-decoration:none;font-family:var(--display);font-variation-settings:"wdth" 112;font-weight:800;font-size:15px;color:var(--pink);background:var(--on-page);border-radius:12px;padding:10px 16px;box-shadow:0 6px 0 rgba(22,4,12,.25)}
 .gh-btn:hover{background:#2B0C19}
+
+/* lists that used to sit straight on the page get the dark panel too */
+#live-signals-body{background:#1C0710;border:1px solid #16040C;border-radius:20px;box-shadow:0 8px 0 rgba(22,4,12,.22);padding:6px 18px;overflow:hidden}
+#live-signals-body .signal-row:last-child{border-bottom:0}
+.signal-time{color:#A98A97}
+.signal-token{color:#fff}
+.signal-type-label{color:#E2C4D0}
+.signal-evidence{color:#E2C4D0}
+table.feed .addr,.addr{color:#A98A97}
+/* anything else placed straight on pink stays legible */
+#app > .signal-row,#app > table.feed{background:#1C0710}

@@ -214,7 +214,7 @@ async function renderLiveSignals() {
   renderNav("live-signals");
   app.innerHTML = `
     <div class="section-head">
-      <div><h1>Signals</h1><p>Events worth attention across every recently launched token — sorted by severity, then recency. Not a token list.</p></div>
+      <div><h1>Signals</h1><p>Events worth attention across every recently launched token, newest first. Not a token list.</p></div>
     </div>
     <div id="live-signals-body">${loadingLine()}</div>
   `;
@@ -550,7 +550,7 @@ async function renderRiskView() {
       return;
     }
     body.outerHTML = `
-      <table class="feed" id="risk-body">
+      <div class="table-wrap" id="risk-body"><table class="feed">
         <thead><tr><th>Token</th><th>Deployer</th><th>Risk</th><th>FLETCH Score</th></tr></thead>
         <tbody>
           ${tokens
@@ -564,7 +564,7 @@ async function renderRiskView() {
             )
             .join("")}
         </tbody>
-      </table>`;
+      </table></div>`;
   } catch (e) {
     body.innerHTML = stateBlock("error", "COULDN'T LOAD RISK DATA", e.message);
   }
