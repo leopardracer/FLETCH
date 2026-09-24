@@ -338,6 +338,68 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 .numbers .n b{transition:color .3s}
 .numbers .n b.tick{color:#fff}
 
+/* ---------- motion, round two ---------- */
+@keyframes shine{0%{background-position:-160% 0}100%{background-position:260% 0}}
+@keyframes floatUp{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:.9}100%{transform:translateY(-110vh) rotate(180deg);opacity:0}}
+@keyframes burst{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
+@keyframes rowIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}
+@keyframes blink{0%,92%,100%{opacity:1}95%{opacity:.2}}
+
+/* reading progress under the nav */
+.progress{position:absolute;left:0;bottom:-3px;height:3px;width:100%;background:var(--ink);transform-origin:0 50%;transform:scaleX(0)}
+
+/* the pink half of the headline gets a light passing over it now and then */
+@keyframes textShine{from{background-position:100% 0}to{background-position:0% 0}}
+/* the gradient is 3x wider than the text and always covers it: blush at both ends, white in the middle */
+.js .hero h1 .l2 i{background:linear-gradient(100deg,var(--blush) 0 42%,#fff 50%,var(--blush) 58% 100%) 100% 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent}
+.js .hero h1 .l2 i.shine{animation:lineUp 0s forwards,textShine 1.4s ease-in-out forwards}  /* keep the line in place; only the light moves */
+.js .hero h1 .l2:nth-child(4) i.shine{animation-delay:0s,.12s}
+
+/* pixels drifting up through the pink sections */
+.pixels{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.pixels i{position:absolute;bottom:-20px;width:8px;height:8px;background:rgba(255,255,255,.55);animation:floatUp linear infinite}
+.pixels i:nth-child(3n){background:rgba(22,4,12,.35);width:6px;height:6px}
+.pixels i:nth-child(4n){width:12px;height:12px;background:rgba(255,194,216,.6)}
+.hero > .wrap,.final > .wrap{position:relative;z-index:1}
+
+/* buttons: a shine crosses on hover, pixels burst on click */
+.btn{position:relative;overflow:hidden}
+.btn::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%) 0 0/250% 100% no-repeat;background-position:-160% 0;pointer-events:none}
+.btn:hover::after{animation:shine .8s ease}
+.spark{position:fixed;z-index:100;width:7px;height:7px;pointer-events:none;animation:burst .7s cubic-bezier(.2,.8,.3,1) forwards}
+
+/* the live dot in the tape blinks like a recorder */
+.live:not(.stale):not(.off) span{animation:blink 2.4s steps(1) infinite}
+.rows li.slide{animation:rowIn .45s cubic-bezier(.2,.8,.2,1) both}
+
+/* a scan line passes over the numbers band */
+.numbers{position:relative;overflow:hidden}
+.numbers::after{content:"";position:absolute;top:0;bottom:0;left:0;width:160px;background:linear-gradient(90deg,transparent,rgba(255,45,122,.14),transparent);animation:sweep 7s linear infinite;pointer-events:none}
+
+/* "what it reads": a pink bar grows under the term you point at */
+.reads dt{position:relative;display:inline-block}
+.reads dt::after{content:"";position:absolute;left:0;bottom:-4px;height:4px;width:100%;background:var(--pink);transform:scaleX(0);transform-origin:0 50%;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+.reads dl > div:hover dt::after{transform:scaleX(1)}
+
+/* radar rows lean in on hover */
+.board a{transition:transform .25s cubic-bezier(.2,.8,.2,1),background .2s}
+.board a:hover{transform:translateX(8px)}
+.board a.flash{animation:rowIn .5s ease both}
+
+/* profile pictures turn to show their name */
+.pfps a{position:relative;perspective:600px}
+.pfps a .nm{position:absolute;inset:0;display:grid;place-items:center;background:var(--ink);color:var(--pink);font-family:var(--display);font-variation-settings:"wdth" 112;font-weight:800;font-size:14px;text-align:center;padding:6px;opacity:0;transform:rotateY(90deg);transition:opacity .2s,transform .35s cubic-bezier(.2,.8,.2,1)}
+.pfps a:hover .nm,.pfps a:focus-visible .nm{opacity:1;transform:none}
+
+/* faq answers open smoothly */
+.faq details p{overflow:hidden}
+.faq details.opening p{animation:rise .35s ease both}
+
+/* the cats look where you're pointing */
+.tape-wrap .cat,.final .cat{transition:scale .2s ease}
+.cat.flip{scale:-1 1}
+
 /* ---------- responsive ---------- */
 @media (max-width:1000px){
   .hero .grid,.ai .grid,.oss .grid,.faq .grid,.token .grid,.reads .top{grid-template-columns:minmax(0,1fr)}
@@ -371,6 +433,8 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   .js [data-reveal],.js [data-stagger] > *,.js .hero .lede,.js .hero .ctas,.js .hero .note,.js .tape,.js .final .cat{opacity:1!important;transform:none!important}
   .js .hero h1 span > i{transform:none!important}
   .ticker .track{white-space:normal;flex-wrap:wrap}
+  .pixels,.numbers::after,.progress{display:none}
+  .js .hero h1 .l2 i{color:var(--blush);background:none}
 }
 </style>
 </head>
@@ -379,6 +443,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <a class="sr" href="#main">Skip to content</a>
 
 <header class="nav">
+  <div class="progress" id="progress" aria-hidden="true"></div>
   <div class="wrap">
     <a class="brand" href="#top" aria-label="FLETCH home">
       <img class="cat" src="mascot.png" alt="" width="40" height="38">
@@ -404,6 +469,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 <!-- HERO -->
 <section class="pink hero" id="top">
+  <div class="pixels" aria-hidden="true"></div>
   <div class="wrap grid">
     <div class="hero-copy">
       <h1 class="d1"><span><i>The meme</i></span><span><i>moves first.</i></span><span class="l2"><i>FLETCH tells</i></span><span class="l2"><i>you why.</i></span></h1>
@@ -582,14 +648,14 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       <a class="btn btn-solid" href="brand/fletch-community-kit.zip" download>Download the kit</a>
     </div>
     <div class="pfps" data-stagger>
-      <a href="brand/pfp/fletch-pfp-classic.png" download><img src="brand/pfp/fletch-pfp-classic.png" alt="Classic FLETCH cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-detective.png" download><img src="brand/pfp/fletch-pfp-detective.png" alt="Detective cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-sniper.png" download><img src="brand/pfp/fletch-pfp-sniper.png" alt="Sniper cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-night.png" download><img src="brand/pfp/fletch-pfp-night.png" alt="Night cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-laser.png" download><img src="brand/pfp/fletch-pfp-laser.png" alt="Laser cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-dj.png" download><img src="brand/pfp/fletch-pfp-dj.png" alt="DJ cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-king.png" download><img src="brand/pfp/fletch-pfp-king.png" alt="King cat" loading="lazy"></a>
-      <a href="brand/pfp/fletch-pfp-party.png" download><img src="brand/pfp/fletch-pfp-party.png" alt="Party cat" loading="lazy"></a>
+      <a href="brand/pfp/fletch-pfp-classic.png" download><img src="brand/pfp/fletch-pfp-classic.png" alt="Classic FLETCH cat" loading="lazy"><span class="nm" aria-hidden="true">Classic</span></a>
+      <a href="brand/pfp/fletch-pfp-detective.png" download><img src="brand/pfp/fletch-pfp-detective.png" alt="Detective cat" loading="lazy"><span class="nm" aria-hidden="true">Detective</span></a>
+      <a href="brand/pfp/fletch-pfp-sniper.png" download><img src="brand/pfp/fletch-pfp-sniper.png" alt="Sniper cat" loading="lazy"><span class="nm" aria-hidden="true">Sniper</span></a>
+      <a href="brand/pfp/fletch-pfp-night.png" download><img src="brand/pfp/fletch-pfp-night.png" alt="Night cat" loading="lazy"><span class="nm" aria-hidden="true">Night</span></a>
+      <a href="brand/pfp/fletch-pfp-laser.png" download><img src="brand/pfp/fletch-pfp-laser.png" alt="Laser cat" loading="lazy"><span class="nm" aria-hidden="true">Laser</span></a>
+      <a href="brand/pfp/fletch-pfp-dj.png" download><img src="brand/pfp/fletch-pfp-dj.png" alt="DJ cat" loading="lazy"><span class="nm" aria-hidden="true">DJ</span></a>
+      <a href="brand/pfp/fletch-pfp-king.png" download><img src="brand/pfp/fletch-pfp-king.png" alt="King cat" loading="lazy"><span class="nm" aria-hidden="true">King</span></a>
+      <a href="brand/pfp/fletch-pfp-party.png" download><img src="brand/pfp/fletch-pfp-party.png" alt="Party cat" loading="lazy"><span class="nm" aria-hidden="true">Party</span></a>
     </div>
     <div class="stickers">
       <a href="brand/stickers/fletch-stk-gm.png" download><img src="brand/stickers/fletch-stk-gm.png" alt="gm sticker" loading="lazy"></a>
@@ -623,6 +689,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 <!-- FINAL -->
 <section class="pink final" id="final">
+  <div class="pixels" aria-hidden="true"></div>
   <img class="cat" id="cat-final" src="mascot.png" alt="" width="340" height="321" loading="lazy" title="Pet the cat">
   <span class="say" id="say-final" aria-hidden="true"></span>
   <div class="wrap">
@@ -707,7 +774,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       $("tape-rows").innerHTML = list.map(function (s, i) {
         var key = s.token + s.type + s.timestamp;
         var isNew = !seen[key]; seen[key] = 1;
-        var cls = "sev-" + esc(s.severity) + (isNew && !firstLoad ? " new" : "") + (firstLoad ? " new" : "");
+        var cls = "sev-" + esc(s.severity) + (isNew && !firstLoad ? " new slide" : "") + (firstLoad ? " new" : "");
         var style = firstLoad ? ' style="animation-delay:' + (i * 90) + 'ms"' : "";
         return '<li class="' + cls + '"' + style + '><a href="' + APP + "/#/token/" + esc(s.token) + '"><i class="dot" aria-hidden="true"></i>' +
           '<span class="what"><b>' + name(s.symbol, s.token) + "</b> — " + esc(says(s)) + '</span><span class="ago">' + ago(s.timestamp) + "</span></a></li>";
@@ -744,6 +811,8 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       var list = (d.radar || []).slice(0, 5);
       if (!list.length) { $("board").innerHTML = '<p class="quiet">The radar is quiet — nothing is changing much on-chain in the last half hour.</p>'; return; }
       var max = Math.max.apply(null, list.map(function (e) { return e.radarScore || 0; })) || 1;
+      var order = list.map(function (e) { return e.token; }).join(",");
+      var changed = radar.last && radar.last !== order; radar.last = order;
       $("board").innerHTML = list.map(function (e, i) {
         var why = e.topSignal ? says(e.topSignal) : "";
         var pct = Math.max(6, Math.round(((e.radarScore || 0) / max) * 100));
@@ -752,6 +821,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
           '<span class="why">' + esc(why.charAt(0).toUpperCase() + why.slice(1)) + (e.riskLevel ? ", risk " + esc(String(e.riskLevel).toLowerCase()) : "") + "</span>" +
           '<span class="sc"><b>' + Math.round(e.radarScore || 0) + '</b><i><s style="width:' + pct + '%"></s></i></span></a>';
       }).join("");
+      if (changed) [].forEach.call($("board").children, function (a, i) { a.classList.add("flash"); a.style.animationDelay = (i * 60) + "ms"; });
     }).catch(function () {
       $("board").innerHTML = '<p class="quiet">Couldn\'t reach the radar just now. Open it in the app.</p>';
     });
@@ -810,6 +880,59 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
     var t0 = performance.now(), dur = from ? 600 : 1400;
     (function step(t) { var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
       el.textContent = fmt(Math.round(from + (to - from) * e)); if (k < 1) requestAnimationFrame(step); })(t0);
+  }
+
+  // ---- round two ----
+  if (!reduce) {
+    // reading progress
+    var bar = $("progress");
+    function prog() { var h = document.documentElement; bar.style.transform = "scaleX(" + Math.min(1, h.scrollTop / Math.max(1, h.scrollHeight - innerHeight)) + ")"; }
+    addEventListener("scroll", prog, { passive: true }); prog();
+
+    // a light passes over "FLETCH tells you why." every few seconds
+    var pinks = document.querySelectorAll(".hero h1 .l2 i");
+    function shine() { pinks.forEach(function (i) { i.classList.remove("shine"); void i.offsetWidth; i.classList.add("shine"); }); }
+    setTimeout(shine, 1700); setInterval(shine, 6500);
+
+    // drifting pixels
+    [].forEach.call(document.querySelectorAll(".pixels"), function (box) {
+      for (var n = 0; n < 16; n++) {
+        var p = document.createElement("i");
+        p.style.left = (Math.random() * 100) + "%";
+        p.style.animationDuration = (9 + Math.random() * 12) + "s";
+        p.style.animationDelay = (-Math.random() * 20) + "s";
+        box.appendChild(p);
+      }
+    });
+
+    // pixel burst on any button press
+    var COLORS = ["#FF2D7A", "#FFC2D8", "#16040C", "#ffffff", "#3BF08A"];
+    document.addEventListener("pointerdown", function (e) {
+      var b = e.target.closest && e.target.closest(".btn, .copy:not(:disabled)"); if (!b) return;
+      for (var n = 0; n < 12; n++) {
+        var sp = document.createElement("i"); sp.className = "spark";
+        var a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 50;
+        sp.style.left = e.clientX + "px"; sp.style.top = e.clientY + "px"; sp.style.background = COLORS[n % COLORS.length];
+        sp.style.setProperty("--dx", Math.cos(a) * d + "px"); sp.style.setProperty("--dy", Math.sin(a) * d + "px"); sp.style.setProperty("--r", (Math.random() * 360) + "deg");
+        document.body.appendChild(sp); setTimeout(function (x) { return function () { x.remove(); }; }(sp), 750);
+      }
+    });
+
+    // cats turn toward the pointer and lean a little
+    var cats = [$("cat-tape"), $("cat-final")].filter(Boolean);
+    addEventListener("pointermove", function (e) {
+      cats.forEach(function (c) {
+        var r = c.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return;
+        var cx = r.left + r.width / 2, dx = e.clientX - cx;
+        c.classList.toggle("flip", dx < -40);                       // the sprite faces right; flip to face left
+        c.style.rotate = Math.max(-6, Math.min(6, (e.clientY - (r.top + r.height / 2)) / 40)) * (dx < -40 ? -1 : 1) + "deg";
+      });
+    }, { passive: true });
+
+    // faq: answers rise in as they open
+    [].forEach.call(document.querySelectorAll(".faq details"), function (d) {
+      d.addEventListener("toggle", function () { if (d.open) { d.classList.remove("opening"); void d.offsetWidth; d.classList.add("opening"); } });
+    });
   }
 
   tape(); numbers(); radar();
