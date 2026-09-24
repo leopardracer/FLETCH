@@ -83,17 +83,18 @@ footer nav a{display:inline-flex;align-items:center;gap:8px}
 
 /* ---------- nav ---------- */
 .nav{position:sticky;top:0;z-index:50;background:var(--pink);border-bottom:3px solid var(--ink)}
-.nav .wrap{display:flex;align-items:center;gap:28px;height:72px;max-width:none}  /* the bar spans the window: logo hard left, buttons hard right */
+.nav .wrap{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:24px;height:72px;max-width:none;padding:0 clamp(16px,2vw,28px)}  /* logo hard left, sections centred on the window, buttons hard right */
+.nav .brand{justify-self:start}
 .nav .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
 .nav .brand img.cat{width:40px;image-rendering:pixelated;filter:drop-shadow(0 2px 0 rgba(22,4,12,.35))}
 .nav .brand img.word{height:24px;width:auto;filter:drop-shadow(0 2px 0 rgba(22,4,12,.35))}
-.nav .links{display:flex;gap:22px;margin-left:8px}
+.nav .links{display:flex;gap:22px;justify-self:center}
 .nav .links a{text-decoration:none;font-weight:600;font-size:16px;white-space:nowrap}
 .nav .links a:hover{text-decoration:underline;text-underline-offset:5px;text-decoration-thickness:2px}
-.nav .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.nav .right{justify-self:end;display:flex;align-items:center;gap:8px}
 .nav .right a.plain{text-decoration:none;font-weight:600;font-size:16px}
 .nav .btn{padding:7px 13px;font-size:14px;gap:7px;border-width:2px;border-radius:10px;box-shadow:none}
-@media (max-width:1240px){.nav .links{display:none}}
+@media (max-width:1290px){.nav .links{display:none}.nav .wrap{grid-template-columns:auto 1fr}}
 @media (max-width:640px){.nav .right .btn .lbl{display:none}.nav .right .btn{gap:0}}
 @media (max-width:480px){.nav .brand img.word{display:none}}
 .nav .brand,.nav .brand img{flex-shrink:0}
@@ -293,7 +294,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   .final .cat{opacity:.35}
   .numbers .n{padding-left:14px;padding-right:10px}
   .numbers .n b{font-size:26px;font-variation-settings:"wdth" 100}
-  .nav .wrap{gap:14px}.nav .btn{padding:7px 11px;font-size:14px}
+  .nav .wrap{gap:14px;grid-template-columns:auto 1fr}.nav .btn{padding:7px 11px;font-size:14px}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
