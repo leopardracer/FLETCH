@@ -1156,3 +1156,25 @@ table.feed .addr,.addr{color:#A98A97}
   .topbar{position:relative}
   .navbar{top:0}
 }
+
+/* ================= Ask FLETCH AI: never over the content column =================
+   main = max-width 1180px + 28px padding, so the free pink gutter on the right is
+   (100vw - 1180px)/2 + 28px. The button only goes where it fits in that gutter. */
+.ask-fab { right: 22px; bottom: 22px; }
+
+/* not enough room for the full pill → compact round cat button */
+@media (max-width: 1600px) and (min-width: 761px) {
+  .ask-fab { padding: 12px; border-radius: 50%; }
+  .ask-fab span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* not enough room even for the round button → shrink the column to make a lane for it */
+@media (max-width: 1300px) and (min-width: 761px) {
+  main { padding-right: 88px; }
+}
+
+/* phones: no floating button over the content — "Ask FLETCH AI" leads the sticky nav instead */
+@media (max-width: 760px) {
+  .ask-fab { display: none; }
+  .navlink-ai { order: -1; font-weight: 800; color: var(--on-page); }
+}

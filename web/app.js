@@ -21,7 +21,7 @@ function renderNav(active) {
   const bar = document.getElementById("navbar");
   if (!bar) return;
   bar.innerHTML = NAV.map(
-    (n) => `<a class="navlink${n.id === active ? " active" : ""}" onclick="location.hash='${navHref(n.id)}'">${n.label}</a>`
+    (n) => `<a class="navlink${n.id === "chat" ? " navlink-ai" : ""}${n.id === active ? " active" : ""}" onclick="location.hash='${navHref(n.id)}'">${n.label}</a>`
   ).join("");
 }
 
