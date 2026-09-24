@@ -1082,3 +1082,49 @@ footer a:hover{color:var(--pink)}
 .component .name{font-family:var(--sans);font-weight:600;color:var(--ink-dim)}
 footer{max-width:1200px;margin:0 auto;padding:28px 24px 40px}
 @media (max-width:640px){.kpi{padding:14px}.kpi b{font-size:22px;font-variation-settings:"wdth" 100}}
+
+/* =====================================================================
+   Pink page. The app sits on the brand pink like getfletch.xyz; data
+   lives in wine-dark panels on top of it (the landing's "tape" look), so
+   dense numbers keep their contrast. Anything that sits straight on the
+   page — titles, intros, notes, the token header — is set in ink.
+   ===================================================================== */
+:root{--page:#FF2D7A;--on-page:#16040C;--on-page-dim:#4A1428;--on-page-faint:#7A2A48}
+html,body{background:var(--page)}
+body{background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.16) 1px,transparent 1.6px);background-size:22px 22px}
+::selection{background:var(--on-page);color:var(--pink)}
+:focus-visible{outline-color:var(--on-page)}
+
+/* tabs join the pink bar */
+.topbar{border-bottom:0}
+.navbar{background:var(--page);backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:3px solid var(--on-page);top:64px}
+.navlink{color:var(--on-page-dim)}
+.navlink:hover{color:var(--on-page)}
+.navlink.active{color:var(--on-page);border-bottom:3px solid var(--on-page)}
+
+/* straight on the page */
+.section-head h1,.detail-head h1{color:var(--on-page)}
+.section-head p{color:var(--on-page-dim)}
+.back{color:var(--on-page-dim)}
+.back:hover{color:var(--on-page)}
+.detail-head .addr,.detail-head .addr a.hash{color:var(--on-page-dim);text-decoration-color:rgba(22,4,12,.35)}
+.detail-head .asof{color:var(--on-page-faint)}
+.score-big .num{color:var(--on-page)}
+.score-big .label,.risk-under{color:var(--on-page-dim)}
+.wl-summary{color:var(--on-page-dim)}
+.wl-summary b{color:var(--on-page)}
+.wl-note{color:var(--on-page-dim)}
+.dead-note{color:var(--on-page-dim)}
+footer{color:var(--on-page-dim);border-top-color:rgba(22,4,12,.25)}
+footer a{color:var(--on-page)}
+footer a:hover{color:#fff}
+
+/* panels: the dark "tape" on pink, with a little lift */
+.panel-block,.card,.ai-card,.radar-card,.doc-card,.state-block,.chat-panel,.kpi,.table-wrap,.seg{background:#1C0710;border-color:rgba(22,4,12,.9);box-shadow:0 8px 0 rgba(22,4,12,.22)}
+.ai-card{background:linear-gradient(180deg,rgba(255,45,122,.1),transparent 60%),#1C0710;border-color:#16040C}
+.kpi b{color:var(--pink)}
+.seg-btn{color:#E2C4D0}
+.seg-btn.on{background:var(--pink);color:var(--on-page)}
+.ask-fab{background:var(--on-page);color:var(--pink);box-shadow:0 6px 0 rgba(22,4,12,.3)}
+.ask-fab:hover,.ask-fab:focus-visible{background:#2B0C19}
+.search input{background:var(--on-page)}
