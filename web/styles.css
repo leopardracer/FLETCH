@@ -1149,3 +1149,10 @@ footer nav a{display:inline-flex;align-items:center;gap:7px}
 table.feed .addr,.addr{color:#A98A97}
 /* anything else placed straight on pink stays legible */
 #app > .signal-row,#app > table.feed{background:#1C0710}
+
+/* Phones: the pink bar wraps to three rows (~160px), so it scrolls away
+   and only the tabs stay pinned — before, the tabs slid under the bar. */
+@media (max-width:760px){
+  .topbar{position:relative}
+  .navbar{top:0}
+}
