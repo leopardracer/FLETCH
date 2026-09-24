@@ -102,7 +102,12 @@ footer nav a{display:inline-flex;align-items:center;gap:8px}
 /* ---------- hero ---------- */
 .hero{padding:clamp(28px,4vw,56px) 0 clamp(48px,6vw,88px);overflow:hidden}
 .hero .grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:clamp(28px,4vw,64px);align-items:center}
-.hero h1{font-size:clamp(38px,4.9vw,80px)}
+.hero h1{font-size:clamp(34px,4.6vw,80px)}
+/* Sized to its column, not the window: the widest line ("FLETCH tells") is
+   ~7.8em, so 12cqi keeps every line on one row with room to spare. */
+.hero-copy{container-type:inline-size}
+@supports (width:1cqi){.hero h1{font-size:clamp(30px,12cqi,80px)}}
+.hero h1 span,.hero h1 i{white-space:nowrap}
 .hero h1 span{display:block}
 .hero h1 .l2{color:var(--blush);-webkit-text-stroke:0}
 .hero .lede{margin-top:clamp(20px,2.4vw,32px)}
@@ -400,7 +405,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <!-- HERO -->
 <section class="pink hero" id="top">
   <div class="wrap grid">
-    <div>
+    <div class="hero-copy">
       <h1 class="d1"><span><i>The meme</i></span><span><i>moves first.</i></span><span class="l2"><i>FLETCH tells</i></span><span class="l2"><i>you why.</i></span></h1>
       <p class="lede">FLETCH reads every launch on Robinhood Chain as it happens — trades, holders, liquidity, wallets and risk — and its AI explains what's moving in plain English. It only ever speaks from on-chain evidence.</p>
       <div class="ctas">
