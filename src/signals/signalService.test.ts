@@ -159,3 +159,28 @@ test("the in-memory result still reflects the current read's real signals even w
   // Persistence was skipped (dedup), but the caller (e.g. the API response) still gets the real, freshly computed signals.
   assert.ok(result.signals.some((s) => s.type === "BUY_PRESSURE"));
 });
+
+// ---------- no duplicate filing ----------
+
+test("a whale move is filed once per transaction, however many checks re-read it", () => {
+  const whale = { from: CURVE, to: "0x1111111111111111111111111111111111111111" as `0x${string}`, amount: 5_000_000, txHash: ("0x" + "ab".repeat(32)) as `0x${string}`, blockNumber: 100n };
+  for (let i = 0; i < 4; i++) analyzeAndPersist(TOKEN, launch(), metrics({ whaleMoves: [whale] }), NO_SMART_MONEY, NO_SOCIAL, NOW + i * 600);
+  const whales = getSignalsForToken(TOKEN, 100).filter((s) => s.type.startsWith("WHALE_"));
+  assert.equal(whales.length, 1);
+  const second = { ...whale, txHash: ("0x" + "cd".repeat(32)) as `0x${string}` };
+  analyzeAndPersist(TOKEN, launch(), metrics({ whaleMoves: [whale, second] }), NO_SMART_MONEY, NO_SOCIAL, NOW + 5 * 600);
+  assert.equal(getSignalsForToken(TOKEN, 100).filter((s) => s.type.startsWith("WHALE_")).length, 2, "a new tx is a new signal");
+});
+
+test("an unchanged risk finding is filed again only after a day; a changed one right away", () => {
+  const thin = (usd: number) => metrics({ liquidityUsd: usd });
+  analyzeAndPersist(TOKEN, launch(), thin(1_000), NO_SMART_MONEY, NO_SOCIAL, NOW);
+  analyzeAndPersist(TOKEN, launch(), thin(1_000), NO_SMART_MONEY, NO_SOCIAL, NOW + 600);
+  analyzeAndPersist(TOKEN, launch(), thin(1_000), NO_SMART_MONEY, NO_SOCIAL, NOW + 1200);
+  const count = () => getSignalsForToken(TOKEN, 100).filter((s) => s.type === "THIN_LIQUIDITY").length;
+  assert.equal(count(), 1, "same evidence three checks in a row → one row");
+  analyzeAndPersist(TOKEN, launch(), thin(400), NO_SMART_MONEY, NO_SOCIAL, NOW + 1800);
+  assert.equal(count(), 2, "the evidence changed ($400) → filed");
+  analyzeAndPersist(TOKEN, launch(), thin(400), NO_SMART_MONEY, NO_SOCIAL, NOW + 1800 + 25 * 3600);
+  assert.equal(count(), 3, "a day later the standing fact is filed again");
+});

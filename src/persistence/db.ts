@@ -173,6 +173,20 @@ export function migrateInPlace(db: DatabaseSync): void {
   if (!cols.some((c) => c.name === "last_activity_block")) {
     db.exec(`ALTER TABLE monitored_tokens ADD COLUMN last_activity_block INTEGER`);
   }
+
+  // One-time clean-up (user_version 1): the same whale transaction used to be
+  // filed again on every check — keep only its first row. See
+  // signals/signalService.ts isRepeat.
+  const version = (db.prepare(`PRAGMA user_version`).get() as { user_version: number }).user_version;
+  const hasSignals = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'signals'`).get();
+  if (version < 1 && hasSignals) {
+    db.exec(`DELETE FROM signals
+              WHERE type IN ('WHALE_BUY_FROM_CURVE','WHALE_SELL_TO_CURVE','WHALE_TRANSFER')
+                AND id NOT IN (SELECT MIN(id) FROM signals
+                                WHERE type IN ('WHALE_BUY_FROM_CURVE','WHALE_SELL_TO_CURVE','WHALE_TRANSFER')
+                                GROUP BY token, type, evidence)`);
+    db.exec(`PRAGMA user_version = 1`);
+  }
 }
 
 export function getDb(): DatabaseSync {

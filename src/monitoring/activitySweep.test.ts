@@ -157,3 +157,28 @@ test("an existing database gets the last_activity_block column added in place", 
   assert.ok(cols().includes("last_activity_block"));
   assert.deepEqual(db.prepare(`SELECT token, last_activity_block FROM monitored_tokens`).all().map((r) => ({ ...r })), [{ token: "0x1", last_activity_block: null }], "existing rows kept");
 });
+
+
+test("the one-time clean-up keeps only the first row of each repeated whale transaction", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE monitored_tokens (token TEXT PRIMARY KEY, first_detected_at INTEGER NOT NULL, last_checked_at INTEGER, last_success_at INTEGER,
+    next_check_at INTEGER NOT NULL, status TEXT NOT NULL, phase TEXT, failure_count INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+    priority TEXT NOT NULL, updated_at INTEGER NOT NULL, launch_json TEXT)`);
+  db.exec(`CREATE TABLE signals (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT, type TEXT, severity TEXT, confidence INTEGER, evidence TEXT, explanation TEXT, block_number TEXT, taken_at INTEGER)`);
+  const ins = db.prepare(`INSERT INTO signals (token,type,severity,confidence,evidence,explanation,block_number,taken_at) VALUES (?,?,?,?,?,?,?,?)`);
+  for (let i = 0; i < 5; i++) ins.run("0xa", "WHALE_SELL_TO_CURVE", "MEDIUM", 75, "tx 0x01", "x", "1", 100 + i);
+  ins.run("0xa", "WHALE_SELL_TO_CURVE", "MEDIUM", 75, "tx 0x02", "x", "2", 200);
+  ins.run("0xa", "BUY_PRESSURE", "LOW", 60, "10 buys vs 1 sells", "x", null, 300);
+  ins.run("0xa", "BUY_PRESSURE", "LOW", 60, "10 buys vs 1 sells", "x", null, 400);
+  migrateInPlace(db);
+  const rows = db.prepare(`SELECT type, evidence, taken_at FROM signals ORDER BY id`).all().map((r) => ({ ...r }));
+  assert.deepEqual(rows, [
+    { type: "WHALE_SELL_TO_CURVE", evidence: "tx 0x01", taken_at: 100 },
+    { type: "WHALE_SELL_TO_CURVE", evidence: "tx 0x02", taken_at: 200 },
+    { type: "BUY_PRESSURE", evidence: "10 buys vs 1 sells", taken_at: 300 },
+    { type: "BUY_PRESSURE", evidence: "10 buys vs 1 sells", taken_at: 400 },
+  ], "trend signals are untouched");
+  ins.run("0xa", "WHALE_SELL_TO_CURVE", "MEDIUM", 75, "tx 0x01", "x", "1", 500);
+  migrateInPlace(db);
+  assert.equal(db.prepare(`SELECT COUNT(*) n FROM signals`).get()!.n, 5, "runs once (user_version), never again");
+});

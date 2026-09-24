@@ -18,6 +18,13 @@ export function recordSignal(token: `0x${string}`, signal: Signal): void {
   );
 }
 
+/** True if this exact signal (same token, type and evidence) was recorded at or after `sinceTimestamp`. */
+export function hasSignalSince(token: string, type: SignalType, evidence: string, sinceTimestamp: number): boolean {
+  return !!getDb()
+    .prepare(`SELECT 1 FROM signals WHERE token = ? AND type = ? AND evidence = ? AND taken_at >= ? LIMIT 1`)
+    .get(token.toLowerCase(), type, evidence, sinceTimestamp);
+}
+
 export interface StoredSignal extends Signal {
   token: string;
 }

@@ -1,5 +1,5 @@
 import { getPreviousSnapshot, getSnapshotHistory, recordSnapshot } from "../persistence/snapshots.js";
-import { recordSignal } from "../persistence/signalsStore.js";
+import { recordSignal, hasSignalSince } from "../persistence/signalsStore.js";
 import { detectSignals } from "./signalEngine.js";
 import { analyzeRisk, type RiskReport } from "../risk/riskAnalysis.js";
 import { computeFletchScore, type FletchScore } from "../scoring/fletchScore.js";
@@ -7,7 +7,30 @@ import type { TokenMetrics } from "../data/types.js";
 import type { DetectedLaunch } from "../chain/hunt.js";
 import type { SmartMoneyReport } from "../wallets/smartMoney.js";
 import type { SocialReport } from "../social/social.js";
-import type { Signal } from "./types.js";
+import type { Signal, SignalType } from "./types.js";
+
+/**
+ * Found live once checks became frequent: 3,265 signals in an hour from 39
+ * checks. Every check re-read the same recent window, so every whale move
+ * in it was filed again (the evidence names the same tx), and point-in-time
+ * risk findings ("liquidity is only $0") were filed again unchanged. The
+ * feed, the radar and the brief were counting the same events dozens of
+ * times.
+ *  - A whale move is one on-chain event: filed once per transaction, ever.
+ *  - A risk finding is a standing fact: filed again only if its evidence
+ *    changed, or once a day to stay visible.
+ *  - Trend signals (buy pressure, holder growth, …) compare two snapshots,
+ *    so each one is new information and is always filed.
+ */
+const PER_TX_TYPES = new Set<SignalType>(["WHALE_BUY_FROM_CURVE", "WHALE_SELL_TO_CURVE", "WHALE_TRANSFER"]);
+const STANDING_TYPES = new Set<SignalType>(["DEPLOYER_RISK", "BUNDLED_WALLETS", "SERIAL_DEPLOYER", "HOLDER_CONCENTRATION", "THIN_LIQUIDITY"]);
+const STANDING_REPEAT_SECONDS = 24 * 3600;
+
+export function isRepeat(token: string, s: Signal, now: number): boolean {
+  if (PER_TX_TYPES.has(s.type)) return hasSignalSince(token, s.type, s.evidence, 0);
+  if (STANDING_TYPES.has(s.type)) return hasSignalSince(token, s.type, s.evidence, now - STANDING_REPEAT_SECONDS);
+  return false;
+}
 
 /**
  * "What changed in the last 10 minutes?" is the brief's own framing for
@@ -61,7 +84,7 @@ export function analyzeAndPersist(
   // rows every time, even though nothing new was actually observed.
   const wroteNewSnapshot = recordSnapshot(token, metrics, score, risk.level, now);
   if (wroteNewSnapshot && opts.persistSignals !== false) {
-    for (const s of signals) recordSignal(token, s);
+    for (const s of signals) if (!isRepeat(token, s, now)) recordSignal(token, s);
   }
 
   return { risk, score, signals };
