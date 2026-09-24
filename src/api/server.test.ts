@@ -21,7 +21,8 @@ process.env.RPC_URL = "";
 process.env.BLOCKSCOUT_API_KEY = "";
 process.env.DB_PATH = ":memory:";
 process.env.ENABLE_POLLER = "false";
-process.env.ANTHROPIC_API_KEY = ""; // AI routes must work (deterministically) with no key — and never call out from tests
+process.env.ANTHROPIC_API_KEY = "";
+process.env.BACKUP_TOKEN = "test-backup-token-0123456789"; // AI routes must work (deterministically) with no key — and never call out from tests
 
 const { createServer, buildHealthResponse } = await import("./server.js");
 
@@ -417,4 +418,23 @@ test("GET /api/wallets: empty database gives an honest empty leaderboard with it
   const bad = await (await fetch(`${baseUrl}/api/wallets?sort=nonsense&hours=-5`)).json();
   assert.equal(bad.sort, "active");
   assert.equal(bad.hours, 24);
+});
+
+
+test("GET /api/admin/backup: invisible without the token; with it, says when there's no snapshot yet", async () => {
+  let r = await fetch(`${baseUrl}/api/admin/backup`);
+  assert.equal(r.status, 404);
+  assert.deepEqual(await r.json(), { error: "Not found" });
+  r = await fetch(`${baseUrl}/api/admin/backup?token=test-backup-token-0123456789`);
+  assert.equal(r.status, 404, "a token in the URL is not accepted — header only");
+  r = await fetch(`${baseUrl}/api/admin/backup`, { headers: { authorization: "Bearer wrong-token-000000000000000" } });
+  assert.deepEqual(await r.json(), { error: "Not found" });
+  r = await fetch(`${baseUrl}/api/admin/backup`, { headers: { authorization: "Bearer test-backup-token-0123456789" } });
+  assert.equal(r.status, 404);
+  assert.match((await r.json()).error, /No snapshot yet/);
+});
+
+test("GET /api/health reports the last snapshot without exposing paths", async () => {
+  const b = await (await fetch(`${baseUrl}/api/health`)).json();
+  assert.deepEqual(b.backup, { lastSnapshotAt: null, snapshots: 0 });
 });

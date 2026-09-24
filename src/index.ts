@@ -2,6 +2,7 @@ import { config } from "./core/config.js";
 import { createServer } from "./api/server.js";
 import { startPoller } from "./poller/poller.js";
 import { closeDb } from "./persistence/db.js";
+import { runBackup, backupDir } from "./persistence/backup.js";
 
 const app = createServer();
 let stopPoller: () => void = () => {};
@@ -15,7 +16,26 @@ const server = app.listen(config.port, () => {
     console.warn("BLOCKSCOUT_API_KEY is not set — running on raw RPC log scanning only (works, just slower at scale).");
   }
   if (config.rpcUrl) stopPoller = startPoller(); // no RPC_URL means every poll tick would just fail — don't bother starting it
+  startBackups();
 });
+
+/** Daily database snapshot (persistence/backup.ts): first one 10 minutes after start, then every BACKUP_INTERVAL_HOURS. */
+let backupTimer: ReturnType<typeof setTimeout> | undefined;
+function startBackups(): void {
+  if (!(config.backupIntervalHours > 0) || !backupDir()) return;
+  const tick = () => {
+    try {
+      const r = runBackup();
+      if (r) console.log(`Backup: ${r.file} (${(r.bytes / 1e6).toFixed(1)} MB)${r.removed.length ? `, removed ${r.removed.length} old` : ""}.`);
+    } catch (e) {
+      console.error("Backup failed:", e instanceof Error ? e.message : e);
+    }
+    backupTimer = setTimeout(tick, config.backupIntervalHours * 3600 * 1000);
+    backupTimer.unref();
+  };
+  backupTimer = setTimeout(tick, 10 * 60 * 1000);
+  backupTimer.unref();
+}
 
 /**
  * Closes cleanly on SIGTERM (the signal a process manager/container
@@ -30,6 +50,7 @@ const server = app.listen(config.port, () => {
 function shutdown(signal: string): void {
   console.log(`${signal} received — shutting down...`);
   stopPoller();
+  if (backupTimer) clearTimeout(backupTimer);
   server.close(() => {
     closeDb();
     process.exit(0);

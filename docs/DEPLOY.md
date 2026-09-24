@@ -52,8 +52,24 @@ value = the target). HTTPS is issued automatically once DNS resolves.
 ## Operating notes
 - **Logs:** service → *Deployments → View logs* — the same lines as locally
   (`Discovery: …`, `Monitoring: checked …`, one line per RPC pause).
-- **Backups:** the whole state is `/data/fletch.db`. Railway volumes support
-  backups from the volume's settings; or download it with the Railway CLI.
+- **Backups** — the whole state is `/data/fletch.db`. Three layers, cheapest first:
+  1. **Snapshots on the volume (automatic).** FLETCH writes a consistent copy
+     (`VACUUM INTO`) to `/data/backups/fletch-<UTC time>.db` 10 minutes after
+     start and then every `BACKUP_INTERVAL_HOURS` (24), keeping the newest
+     `BACKUP_KEEP` (3). Protects against a bad migration or a corrupted file,
+     not against losing the volume. `GET /api/health` shows `backup.lastSnapshotAt`.
+  2. **Railway volume backups.** Service → **Backups** → *Edit schedule* →
+     tick **Daily** (kept 6 days) and **Weekly** (kept a month). Restore from
+     the same tab: Railway mounts the restored volume in place of the old one.
+  3. **A copy off Railway.** Set `BACKUP_TOKEN` to a long random string
+     (`openssl rand -hex 24`), then from your own machine:
+     ```bash
+     curl -fsS -H "Authorization: Bearer $BACKUP_TOKEN" \
+       -o "fletch-$(date +%F).db" https://app.getfletch.xyz/api/admin/backup
+     ```
+     Without the token the route answers 404, same as a route that doesn't exist.
+  - **Restoring a snapshot by hand:** stop the service, replace `/data/fletch.db`
+    with the snapshot file, start it again.
 - **Cost:** the Hobby plan (about $5/month, usage-based — check Railway's
   current pricing) covers one small service + a 1 GB volume.
 - **Restarts** are safe: SIGTERM closes the DB cleanly, and the poller resumes

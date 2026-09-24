@@ -34,6 +34,8 @@ import type { WhyIsItMoving } from "../ai/explain.js";
 import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
 import { searchTokens, isKnownToken, isFullAddress } from "../persistence/searchStore.js";
 import { getWalletLeaderboard, type LeaderboardSort } from "../persistence/walletLeaderboard.js";
+import { listBackups } from "../persistence/backup.js";
+import { timingSafeEqual } from "node:crypto";
 
 const provider = new RpcChainDataProvider();
 
@@ -194,7 +196,11 @@ export function createServer(options?: {
 
   app.get("/api/health", asyncRoute(async (_req, res) => {
     const chain = await pingChain();
-    res.json(buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller, rpcBackoff.state(Math.floor(Date.now() / 1000))));
+    const last = listBackups()[0];
+    res.json({
+      ...buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller, rpcBackoff.state(Math.floor(Date.now() / 1000))),
+      backup: { lastSnapshotAt: last ? last.createdAt : null, snapshots: listBackups().length },
+    });
   }));
 
   // Is FLETCH actually watching the chain right now? See
@@ -345,6 +351,26 @@ export function createServer(options?: {
       return;
     }
     res.json({ query: q, kind: "text", results });
+  });
+
+  // Download the newest database snapshot, to keep a copy off the server.
+  // Only exists when BACKUP_TOKEN is set; the token goes in the
+  // Authorization header (Bearer) so it never lands in access logs as a URL.
+  app.get("/api/admin/backup", (req, res) => {
+    const token = config.backupToken;
+    const given = (req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const ok = token.length >= 16 && given.length === token.length && timingSafeEqual(Buffer.from(given), Buffer.from(token));
+    if (!ok) {
+      res.status(404).json({ error: "Not found" }); // indistinguishable from "no such route" without the token
+      return;
+    }
+    const latest = listBackups()[0];
+    if (!latest) {
+      res.status(404).json({ error: "No snapshot yet — the first one is written 10 minutes after start-up." });
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.download(latest.path, latest.file);
   });
 
   app.get("/api/radar", asyncRoute(async (req, res) => {

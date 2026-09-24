@@ -29,6 +29,10 @@ const envSchema = z.object({
   // per visitor, not to the proxy's single IP (which would throttle everyone together).
   TRUST_PROXY: z.coerce.number().default(0),
   DB_PATH: z.string().optional().default("./fletch.db"),
+  // Daily consistent snapshots of the database, kept next to it in backups/ (see persistence/backup.ts).
+  BACKUP_INTERVAL_HOURS: z.coerce.number().default(24), // 0 turns snapshots off
+  BACKUP_KEEP: z.coerce.number().default(3), // newest N snapshots kept
+  BACKUP_TOKEN: z.string().optional().default(""), // set to allow downloading the latest snapshot (GET /api/admin/backup); unset = no download route
   ENABLE_POLLER: zBooleanEnv(true),
   POLL_INTERVAL_MS: z.coerce.number().default(300_000), // 5 min — see docs/ARCHITECTURE.md on why this isn't more aggressive against a shared public RPC
   POLL_TOKEN_LIMIT: z.coerce.number().default(15),
@@ -115,6 +119,9 @@ export const config = {
   port: env.PORT,
   trustProxy: env.TRUST_PROXY,
   dbPath: env.DB_PATH,
+  backupIntervalHours: env.BACKUP_INTERVAL_HOURS,
+  backupKeep: env.BACKUP_KEEP,
+  backupToken: env.BACKUP_TOKEN,
   enablePoller: env.ENABLE_POLLER,
   pollIntervalMs: env.POLL_INTERVAL_MS,
   pollTokenLimit: env.POLL_TOKEN_LIMIT,
