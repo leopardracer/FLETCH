@@ -100,15 +100,15 @@ footer nav a{display:inline-flex;align-items:center;gap:8px}
 .nav .brand,.nav .brand img{flex-shrink:0}
 
 /* ---------- hero ---------- */
-.hero{padding:clamp(48px,7vw,96px) 0 clamp(64px,8vw,120px);overflow:hidden}
-.hero .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.95fr);gap:clamp(32px,5vw,72px);align-items:start;margin-top:clamp(36px,4vw,56px)}
-.hero h1{font-size:clamp(40px,6.4vw,92px)}
+.hero{padding:clamp(28px,4vw,56px) 0 clamp(48px,6vw,88px);overflow:hidden}
+.hero .grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:clamp(28px,4vw,64px);align-items:center}
+.hero h1{font-size:clamp(38px,4.9vw,80px)}
 .hero h1 span{display:block}
 .hero h1 .l2{color:var(--blush);-webkit-text-stroke:0}
-.hero .lede{margin-top:0}
-.hero .ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:36px}
+.hero .lede{margin-top:clamp(20px,2.4vw,32px)}
+.hero .ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:28px}
 .hero .note{margin-top:22px;font-size:15px;max-width:34em}
-.tape-wrap{position:relative;padding-top:clamp(72px,7vw,104px)}
+.tape-wrap{position:relative;padding-top:clamp(64px,6vw,92px)}
 .tape-wrap .cat{position:absolute;right:28px;top:0;width:clamp(76px,7vw,104px);image-rendering:pixelated;pointer-events:none}
 
 /* the tape: real signals, printed as they arrive */
@@ -118,8 +118,9 @@ footer nav a{display:inline-flex;align-items:center;gap:8px}
 .live{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--buy);font-weight:600}
 .live i{width:9px;height:9px;border-radius:50%;background:var(--buy);box-shadow:0 0 0 0 rgba(59,240,138,.6);animation:ping 1.8s infinite}
 .live.off{color:#C9A9B6}.live.off i{background:#C9A9B6;animation:none;box-shadow:none}
+.live.stale{color:var(--warn)}.live.stale i{background:var(--warn);animation:none;box-shadow:none}
 @keyframes ping{0%{box-shadow:0 0 0 0 rgba(59,240,138,.55)}80%,100%{box-shadow:0 0 0 10px rgba(59,240,138,0)}}
-.rows{list-style:none;margin:0;padding:0;min-height:372px}
+.rows{list-style:none;margin:0;padding:0;min-height:292px}
 .rows li a{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:11px 4px;border-bottom:1px solid rgba(255,194,216,.09);text-decoration:none}
 .rows li:last-child a{border-bottom:0}
 .rows li a:hover{background:rgba(255,45,122,.08)}
@@ -331,11 +332,9 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 <!-- HERO -->
 <section class="pink hero" id="top">
-  <div class="wrap">
-    <h1 class="d1"><span>The meme</span><span>moves first.</span><span class="l2">FLETCH tells</span><span class="l2">you why.</span></h1>
-  </div>
   <div class="wrap grid">
     <div>
+      <h1 class="d1"><span>The meme</span><span>moves first.</span><span class="l2">FLETCH tells</span><span class="l2">you why.</span></h1>
       <p class="lede">FLETCH reads every launch on Robinhood Chain as it happens — trades, holders, liquidity, wallets and risk — and its AI explains what's moving in plain English. It only ever speaks from on-chain evidence.</p>
       <div class="ctas">
         <a class="btn btn-solid" href="https://app.getfletch.xyz">Open the app</a>
@@ -609,10 +608,14 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   // ---- the tape ----
   var seen = {}, firstLoad = true;
   function tape() {
-    getJSON("/api/signals?limit=9").then(function (d) {
+    getJSON("/api/signals?limit=7").then(function (d) {
       var status = $("tape-status");
-      status.className = "live"; status.lastChild.textContent = "live";
-      var list = (d.signals || []).slice(0, 9);
+      var list = (d.signals || []).slice(0, 7);
+      // "live" only when the newest signal is recent — otherwise say how old it is.
+      var newest = list.length ? Math.max.apply(null, list.map(function (s) { return s.timestamp || 0; })) : 0;
+      var fresh = newest && (Date.now() / 1000 - newest) < 3600;
+      status.className = fresh ? "live" : "live stale";
+      status.lastChild.textContent = fresh ? "live" : (newest ? "last signal " + ago(newest) : "quiet");
       if (!list.length) { $("tape-rows").innerHTML = '<li class="empty">Quiet on the curves right now — nothing new in the feed.</li>'; return; }
       $("tape-rows").innerHTML = list.map(function (s, i) {
         var key = s.token + s.type + s.timestamp;
