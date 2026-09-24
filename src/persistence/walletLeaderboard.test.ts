@@ -72,3 +72,14 @@ test("sorts: buyers by ETH spent, sellers by ETH received", () => {
   assert.equal(getWalletLeaderboard({ windowBlocks: 100, sort: "buyers" }).wallets[0].wallet, A);
   assert.equal(getWalletLeaderboard({ windowBlocks: 100, sort: "sellers" }).wallets[0].wallet, C);
 });
+
+
+test("token narrows the leaderboard to one token's curve, with its own window", () => {
+  launch(T1, ETH); launch(T2, ETH);
+  recordCurveScan(T1, 1, 1, 1000, [tr(A, "buy", 1, 500), tr(B, "buy", 2, 510)]);
+  recordCurveScan(T2, 1, 1, 9000, [tr(C, "buy", 9, 8900)]);
+  const lb = getWalletLeaderboard({ windowBlocks: 100, token: T1.toUpperCase().replace("0X", "0x") });
+  assert.equal(lb.latestBlock, 510, "the window ends at this token's newest trade, not the chain's");
+  assert.deepEqual(lb.wallets.map((w) => w.wallet).sort(), [A, B].sort());
+  assert.equal(lb.totalTrades, 2);
+});

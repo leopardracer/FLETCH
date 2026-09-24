@@ -455,7 +455,8 @@ export function createServer(options?: {
       ? (req.query.sort as LeaderboardSort)
       : "active";
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 25));
-    res.json({ hours, blocksPerHour: BLOCKS_PER_HOUR, ...getWalletLeaderboard({ windowBlocks: hours * BLOCKS_PER_HOUR, sort, limit }) });
+    const token = typeof req.query.token === "string" && /^0x[0-9a-fA-F]{40}$/.test(req.query.token) ? req.query.token : undefined;
+    res.json({ hours, blocksPerHour: BLOCKS_PER_HOUR, token: token ?? null, ...getWalletLeaderboard({ windowBlocks: hours * BLOCKS_PER_HOUR, sort, limit, token }) });
   });
 
   // Wallet-level intelligence — see wallets/walletScore.ts for exactly what's

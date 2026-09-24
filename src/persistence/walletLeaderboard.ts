@@ -48,13 +48,17 @@ const ORDER: Record<LeaderboardSort, string> = {
   sellers: "ethSold DESC, trades DESC",
 };
 
-export function getWalletLeaderboard(opts: { windowBlocks: number; sort?: LeaderboardSort; limit?: number }): Leaderboard {
+/** `token` narrows everything to one token's curve (its page shows its own top traders). */
+export function getWalletLeaderboard(opts: { windowBlocks: number; sort?: LeaderboardSort; limit?: number; token?: string }): Leaderboard {
   const sort: LeaderboardSort = opts.sort && ORDER[opts.sort] ? opts.sort : "active";
   const limit = Math.max(1, Math.min(100, opts.limit ?? 25));
   const windowBlocks = Math.max(1, Math.floor(opts.windowBlocks));
   const db = getDb();
 
-  const latest = db.prepare(`SELECT MAX(block_number) AS b FROM wallet_trades`).get() as { b: number | null };
+  const token = opts.token ? opts.token.toLowerCase() : null;
+  const latest = (token
+    ? db.prepare(`SELECT MAX(block_number) AS b FROM wallet_trades WHERE token = ?`).get(token)
+    : db.prepare(`SELECT MAX(block_number) AS b FROM wallet_trades`).get()) as { b: number | null };
   if (latest.b === null) {
     return { sort, windowBlocks, latestBlock: null, fromBlock: null, totalWallets: 0, totalTrades: 0, wallets: [] };
   }
@@ -64,9 +68,11 @@ export function getWalletLeaderboard(opts: { windowBlocks: number; sort?: Leader
     FROM wallet_trades w
     JOIN launch_records l ON l.token = w.token
    WHERE w.block_number >= ?
-     AND lower(json_extract(l.record_json, '$.pairToken')) = ?`;
+     AND lower(json_extract(l.record_json, '$.pairToken')) = ?
+     ${token ? "AND w.token = ?" : ""}`;
+  const args: (string | number)[] = token ? [fromBlock, NATIVE_ETH, token] : [fromBlock, NATIVE_ETH];
 
-  const totals = db.prepare(`SELECT COUNT(DISTINCT w.wallet) AS wallets, COUNT(*) AS trades ${scope}`).get(fromBlock, NATIVE_ETH) as {
+  const totals = db.prepare(`SELECT COUNT(DISTINCT w.wallet) AS wallets, COUNT(*) AS trades ${scope}`).get(...args) as {
     wallets: number; trades: number;
   };
 
@@ -85,7 +91,7 @@ export function getWalletLeaderboard(opts: { windowBlocks: number; sort?: Leader
        ORDER BY ${ORDER[sort]}
        LIMIT ?`
     )
-    .all(fromBlock, NATIVE_ETH, limit) as Omit<LeaderboardRow, "netFlow">[];
+    .all(...args, limit) as Omit<LeaderboardRow, "netFlow">[];
 
   return {
     sort,

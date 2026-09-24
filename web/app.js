@@ -344,7 +344,13 @@ async function renderOverview() {
   renderNav("overview");
   app.innerHTML = `
     <div class="section-head">
-      <div><h1>Overview</h1><p>Everything below comes from the same live feed as Tokens and Signals — filtered differently.</p></div>
+      <div><h1>Overview</h1><p>What's happening on Robinhood Chain right now, read straight from the chain.</p></div>
+    </div>
+    <div class="kpis" id="kpis">
+      <div class="kpi"><b id="k-watched">—</b><span>tokens FLETCH is watching</span></div>
+      <div class="kpi"><b id="k-signals">—</b><span>signals in the last hour</span></div>
+      <div class="kpi"><b id="k-wallets">—</b><span>wallets trading in 24h</span></div>
+      <div class="kpi"><b id="k-block">—</b><span>latest block read</span></div>
     </div>
     <div id="brief-slot"></div>
     <div class="overview-grid" id="overview-body">
@@ -353,11 +359,16 @@ async function renderOverview() {
     </div>
   `;
   loadMarketBrief("brief-slot");
+  const setK = (id, v) => { const el = document.getElementById(id); if (el && v !== null && v !== undefined) el.textContent = Number(v).toLocaleString("en-US"); };
+  getJSON("/api/monitoring").then((m) => { setK("k-watched", m.totalMonitored); setK("k-signals", m.signalsLastHour); }).catch(() => {});
+  getJSON("/api/health").then((h) => { if (h.chain && h.chain.ok) setK("k-block", h.chain.blockNumber); }).catch(() => {});
   try {
-    const [data, signalsData] = await Promise.all([
+    const [data, signalsData, walletsData] = await Promise.all([
       getJSON("/api/tokens"),
       getJSON("/api/signals?limit=6").catch(() => ({ signals: [] })),
+      getJSON("/api/wallets?sort=active&hours=24&limit=6").catch(() => null),
     ]);
+    if (walletsData) setK("k-wallets", walletsData.totalWallets);
     const tokens = data.tokens || [];
     const movingNow = [...tokens].sort((a, b) => (b.fletchScore ?? -1) - (a.fletchScore ?? -1)).slice(0, 8);
     const alerts = tokens.filter((t) => t.riskLevel === "HIGH" || t.riskLevel === "CRITICAL").slice(0, 8);
@@ -409,17 +420,45 @@ async function renderOverview() {
         }
       </div>
       <div class="panel-block">
-        <h2>Smart Money</h2>
-        ${stateBlock("unavailable", "NOT AVAILABLE", "Requires a cross-token wallet-performance history store or indexer, neither of which is wired up yet. See docs/DATA.md.")}
-      </div>
-      <div class="panel-block">
-        <h2>Social</h2>
-        ${stateBlock("unavailable", "NOT AVAILABLE", "Requires a social data source. No reliable one for Robinhood Chain tokens was found. See docs/DATA.md.")}
+        <h2>Most active wallets — 24h</h2>
+        ${
+          walletsData && walletsData.wallets && walletsData.wallets.length
+            ? walletsData.wallets
+                .map(
+                  (w) => `<div class="mini-row" style="cursor:pointer" onclick="location.hash='#/wallet/${esc(w.wallet)}'">
+                    <span class="addr" style="font-size:13px">${fmtAddr(w.wallet)}</span>
+                    <span style="font-size:13.5px;color:var(--ink-dim)">${w.trades} trades · <span class="${w.netFlow > 0 ? "pos" : w.netFlow < 0 ? "neg" : ""}">${w.netFlow > 0 ? "+" : ""}${ethAmt(w.netFlow)} ETH</span></span>
+                  </div>`
+                )
+                .join("") + `<div class="mini-row" style="cursor:pointer;justify-content:flex-end" onclick="location.hash='#/wallets'"><span style="color:var(--pink);font-weight:700;font-size:13.5px">All wallets</span></div>`
+            : stateBlock("empty", "NO CURVE TRADES YET", "Wallets show up here as FLETCH records trades on the curves.")
+        }
       </div>
     `;
   } catch (e) {
     document.getElementById("overview-body").innerHTML = stateBlock("error", "COULDN'T LOAD OVERVIEW", e.message);
   }
+}
+
+/* A small line chart of one snapshot field over time — inline SVG, no library. */
+function sparkChart(label, rows, pick, fmt) {
+  const pts = rows.map((r) => ({ t: r.takenAt, v: pick(r) })).filter((p) => typeof p.v === "number" && isFinite(p.v));
+  if (pts.length < 2) return `<div class="chart"><div class="k">${label}</div><div class="v">—</div><div class="span">not enough data yet</div></div>`;
+  const W = 300, H = 70, t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
+  const vs = pts.map((p) => p.v), lo = Math.min(...vs), hi = Math.max(...vs), rng = hi - lo || 1;
+  const x = (t) => ((t - t0) / (t1 - t0 || 1)) * W, y = (v) => H - 6 - ((v - lo) / rng) * (H - 12);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+  const first = pts[0].v, last = pts[pts.length - 1].v, delta = last - first;
+  const pct = first ? Math.round((delta / Math.abs(first)) * 100) : null;
+  const color = delta > 0 ? "var(--green)" : delta < 0 ? "var(--red)" : "var(--pink)";
+  const span = fmtAge(t0);
+  return `<div class="chart"><div class="k">${label}</div>
+    <div class="v">${fmt(last)}${pct !== null && delta !== 0 ? `<small style="color:${color}">${delta > 0 ? "+" : ""}${pct}%</small>` : ""}</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${d} L${W} ${H} L0 ${H} Z" fill="${color}" opacity=".12"/>
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    </svg>
+    <div class="span">over the last ${span} · ${pts.length} checks</div></div>`;
 }
 
 const walletsState = { sort: "active", hours: 24 };
@@ -699,14 +738,14 @@ async function renderToken(address) {
   try {
     const [d, walletsRes, historyRes, signalsRes] = await Promise.all([
       getJSON(`/api/tokens/${address}`),
-      getJSON(`/api/tokens/${address}/wallets`).catch(() => ({ wallets: [] })),
-      getJSON(`/api/tokens/${address}/history`).catch(() => ({ snapshots: [] })),
+      getJSON(`/api/wallets?token=${address}&hours=168&limit=10`).catch(() => ({ wallets: [] })),
+      getJSON(`/api/tokens/${address}/history?limit=120`).catch(() => ({ snapshots: [] })),
       getJSON(`/api/tokens/${address}/signals`).catch(() => ({ signals: [], lifecycle: [] })),
     ]);
     const m = d.metrics;
     const s = d.fletchScore;
     const wallets = (walletsRes.wallets || []).slice(0, 10);
-    const history = (historyRes.snapshots || []).slice(0, 20);
+    const history = (historyRes.snapshots || []).slice().reverse(); // oldest → newest for the charts
     const signals = (signalsRes.signals || []).slice(0, 25);
     const avail = d.dataAvailability || {};
 
@@ -799,57 +838,39 @@ async function renderToken(address) {
       </div>
 
       <div class="panel-block">
-        <h2>Score history</h2>
+        <h2>History</h2>
         ${
           history.length > 1
-            ? `<table class="feed">
-                <thead><tr><th>Time</th><th>FLETCH Score</th><th>Holders</th><th>Liquidity</th></tr></thead>
-                <tbody>
-                  ${history
-                    .map(
-                      (h) => `<tr style="cursor:default">
-                        <td class="addr">${fmtTime(h.takenAt)}</td>
-                        <td>${h.fletchScore ?? "—"}</td>
-                        <td>${h.holderCount ?? "—"}</td>
-                        <td>${h.liquidityUsd !== null && h.liquidityUsd !== undefined ? "$" + h.liquidityUsd.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
-                      </tr>`
-                    )
-                    .join("")}
-                </tbody>
-              </table>`
-            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "Score history builds up as this token is checked over time (page views or the background poller).")
+            ? `<div class="charts">
+                ${sparkChart("Holders", history, (h) => h.holderCount, (v) => Math.round(v).toLocaleString("en-US"))}
+                ${sparkChart("Liquidity", history, (h) => h.liquidityUsd, (v) => "$" + Math.round(v).toLocaleString("en-US"))}
+                ${sparkChart("FLETCH Score", history, (h) => h.fletchScore, (v) => String(Math.round(v)))}
+              </div>`
+            : stateBlock("pending", "NOT ENOUGH HISTORY YET", "Charts build up as FLETCH checks this token over time.")
         }
       </div>
 
       <div class="panel-block">
-        <h2>Smart Money</h2>
-        ${stateBlock("unavailable", "NOT AVAILABLE", d.smartMoney.reason)}
-      </div>
-
-      <div class="panel-block">
-        <h2>Social</h2>
-        ${stateBlock("unavailable", "NOT AVAILABLE", d.social.reason)}
-      </div>
-
-      <div class="panel-block">
-        <h2>Wallet activity</h2>
+        <h2>Top traders — last 7 days</h2>
         ${
           wallets.length
-            ? `<table class="feed">
-                <thead><tr><th>Wallet</th><th>Net accumulation</th><th>Scope</th></tr></thead>
+            ? `<div class="table-wrap"><table class="feed wl-table">
+                <thead><tr><th>Wallet</th><th>Trades</th><th class="num">Bought, ETH</th><th class="num">Sold, ETH</th><th class="num">Net flow</th></tr></thead>
                 <tbody>
                   ${wallets
                     .map(
-                      (w) => `<tr onclick="location.hash='#/wallet/${w.wallet}'">
+                      (w) => `<tr onclick="location.hash='#/wallet/${esc(w.wallet)}'">
                         <td class="addr">${fmtAddr(w.wallet)}</td>
-                        <td>${w.tokensTraded ?? "—"}</td>
-                        <td style="color:var(--ink-faint);font-size:12px">${w.note || ""}</td>
+                        <td>${w.trades} <span class="wl-split"><span class="pos">${w.buys}↑</span> <span class="neg">${w.sells}↓</span></span></td>
+                        <td class="num">${ethAmt(w.ethBought)}</td>
+                        <td class="num">${ethAmt(w.ethSold)}</td>
+                        <td class="num ${w.netFlow > 0 ? "pos" : w.netFlow < 0 ? "neg" : ""}">${w.netFlow > 0 ? "+" : ""}${ethAmt(w.netFlow)}</td>
                       </tr>`
                     )
                     .join("")}
                 </tbody>
-              </table>`
-            : stateBlock("empty", "NO WALLET ACTIVITY", "No holders found in the current scan window.")
+              </table></div>`
+            : stateBlock("empty", "NO CURVE TRADES RECORDED", "FLETCH hasn't recorded a trade on this token's curve in the last 7 days.")
         }
       </div>
     `;
