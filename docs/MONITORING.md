@@ -32,7 +32,7 @@ Dashboard / API
 
 ## Discovery
 
-`runDiscoveryCycle()` scans the same bounded recent-launch window the Tokens feed already scans (`SIGNAL_WINDOW_BLOCKS`) — never the whole chain. For each launch, `upsertDiscovered()` adds it to the queue **only if it isn't already there** (the token address is the table's primary key, so re-discovering a known launch is a cheap no-op, not a duplicate row or a reset of its monitoring state). A new discovery also caches its launch-moment facts (curve address, dev-buy data — see below) and starts at HIGH priority, due for its first check immediately.
+`runDiscoveryCycle()` scans the same bounded recent-launch window the Tokens feed already scans (`SIGNAL_WINDOW_BLOCKS`) — never the whole chain. For each launch, `upsertDiscovered()` adds it to the queue **only if it isn't already there** (the token address is the table's primary key, so re-discovering a known launch is a cheap no-op, not a duplicate row or a reset of its monitoring state). A new discovery also caches its launch-moment facts (curve address, dev-buy data — see below) and starts at NORMAL priority with its first full check deferred by `QUIET_AFTER_SECONDS` (15 min) — see [Activity sweep](#activity-sweep): most launches never trade, and a full check on every one of them used to eat the whole check budget.
 
 Bounded by `MAX_MONITORED_TOKENS`: once the queue is at capacity, further discoveries are skipped and counted (`skippedCapacity`), not silently dropped or allowed to grow storage/RPC load without limit.
 
@@ -70,18 +70,33 @@ Every timestamp here is real: `taken_at`/`timestamp` columns are `Math.floor(Dat
 
 **The important guarantee the brief calls out**: comparing incompatible metrics across a phase transition must never look like a "collapse." A new `PHASE_CHANGE` signal reports a graduation as its own honest, observed event, and both `signals/signalEngine.ts`'s `LIQUIDITY_INCREASE`/`LIQUIDITY_DECREASE` and `risk/riskAnalysis.ts`'s `LIQUIDITY_DETERIORATION` explicitly skip their comparison whenever the phase differs between the two snapshots being compared. In practice, the existing null-safety already prevented the specific false-signal case today (post-graduation liquidity reads as `null`, and the comparison requires both sides non-null) — the explicit guard makes the rule correct-by-construction rather than correct-by-coincidence, and keeps it correct if a future provider (e.g. Bitquery, see `DATA.md`) starts returning a real post-graduation liquidity number.
 
+## Activity sweep
+
+<a id="activity-sweep"></a>
+
+Found live on app.getfletch.xyz: ~3,300 tokens launched on Robinhood Chain in a day, most never traded, and every one got a full check (holders, liquidity, trade history — several RPC calls) the moment it was discovered, at HIGH priority for its first hour. The check budget went to dead launches; 474 of 500 queued tokens had never been checked; the tokens people were actually trading were barely read.
+
+`monitoring/activitySweep.ts` answers "which watched tokens are being traded right now?" for the **whole queue** with a handful of calls: one `eth_getLogs` for the `CurveBuy`/`CurveSell` events of up to 100 curves at a time, over just the blocks since the previous sweep (every `ACTIVITY_SWEEP_INTERVAL_MS`, default 60 s). Then:
+
+- a token with a new curve trade → **HIGH, due now** (`markActive`), and `last_activity_block` is recorded;
+- a launch watched for 15 minutes with no trade ever (and none recorded) → **LOW** before it ever costs a full check (`demoteQuietLaunches`) — it stays queued, is first in line for eviction when the queue is full, and is promoted straight back to HIGH if it ever trades;
+- a trade in the launch block itself is the deployer's dev buy, not market activity, and is ignored;
+- a rate-limited sweep changes nothing — a failed read is not evidence of "no trades" — and the same blocks are swept again after the pause.
+
 ## Priority
 
 <a id="priority"></a>
 
-`computeNextPriority()` (pure, in `monitoringService.ts`) reuses the same `signals` table Radar reads — there's no second definition of "what counts as active":
+`computeNextPriority()` (in `monitoringService.ts`) runs after each full check:
 
 | Condition | Priority |
 |---|---|
-| Discovered less than 1 hour ago | **HIGH** — every launch gets a fair first look regardless of activity |
+| Has traded, and discovered less than 1 hour ago | **HIGH** |
+| Never traded, still inside its 15-minute quiet window | **NORMAL** |
+| Never traded, past its quiet window (a never-traded token's signals are static risk facts, not activity) | **LOW** |
 | Has a signal within the last 30 minutes (Radar's own window) | **HIGH** |
 | Has ever produced a signal, but not recently | **NORMAL** |
-| Has never produced a signal and isn't a fresh launch | **LOW** |
+| Otherwise | **LOW** |
 
 Check interval scales with priority off the same `POLL_INTERVAL_MS` base: HIGH = 1×, NORMAL = 3×, LOW = 8×. A quiet token still gets checked — just less often, so it can't silently starve the concurrency budget that active tokens need.
 
@@ -120,6 +135,7 @@ All in `.env.example`, all with bounded, conservative defaults so a misconfigura
 | Variable | Default | What it bounds |
 |---|---|---|
 | `DISCOVERY_INTERVAL_MS` | 300000 (5 min) | how often the launch scan + retention prune run |
+| `ACTIVITY_SWEEP_INTERVAL_MS` | 60000 (1 min) | how often every watched curve is checked for new trades in one batched read |
 | `MAX_CONCURRENT_TOKENS` | 5 | in-flight chain reads per monitoring cycle |
 | `MAX_MONITORED_TOKENS` | 500 | hard cap on the queue itself |
 | `MAX_CONSECUTIVE_FAILURES` | 5 | checks before a token is marked FAILED and stops being scheduled |

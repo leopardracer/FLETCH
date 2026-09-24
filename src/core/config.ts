@@ -35,6 +35,7 @@ const envSchema = z.object({
   SNAPSHOT_MIN_INTERVAL_SECONDS: z.coerce.number().default(60), // don't record near-duplicate snapshots from rapid page views
 
   // --- Continuous monitoring (docs/MONITORING.md) ---
+  ACTIVITY_SWEEP_INTERVAL_MS: z.coerce.number().default(60_000), // how often to check every watched curve for new trades in one batched read (monitoring/activitySweep.ts)
   DISCOVERY_INTERVAL_MS: z.coerce.number().default(300_000), // how often to scan for new launches and add them to the monitoring queue
   MAX_CONCURRENT_TOKENS: z.coerce.number().default(5), // in-flight chain reads per monitoring cycle — bounds RPC load regardless of queue size
   MAX_MONITORED_TOKENS: z.coerce.number().default(500), // hard cap on the monitoring queue — bounded storage/RPC even if launches vastly outpace check capacity
@@ -119,6 +120,7 @@ export const config = {
   pollTokenLimit: env.POLL_TOKEN_LIMIT,
   snapshotMinIntervalSeconds: env.SNAPSHOT_MIN_INTERVAL_SECONDS,
   discoveryIntervalMs: env.DISCOVERY_INTERVAL_MS,
+  activitySweepIntervalMs: env.ACTIVITY_SWEEP_INTERVAL_MS,
   maxConcurrentTokens: env.MAX_CONCURRENT_TOKENS,
   maxMonitoredTokens: env.MAX_MONITORED_TOKENS,
   maxConsecutiveFailures: env.MAX_CONSECUTIVE_FAILURES,

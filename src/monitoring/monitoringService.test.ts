@@ -204,9 +204,21 @@ test("one broken token never stops the rest of the batch from being checked", as
 
 // ---------- priority ----------
 
-test("a brand-new launch is HIGH priority regardless of activity", () => {
+test("a brand-new launch that is trading is HIGH priority", () => {
   const token = getMonitoredTokenFixture({ firstDetectedAt: NOW, token: addr(1) });
   assert.equal(computeNextPriority(token, NOW + 10), "HIGH");
+});
+
+test("a brand-new launch with no trade yet waits at NORMAL, then settles to LOW once its quiet window passes", () => {
+  const token = getMonitoredTokenFixture({ firstDetectedAt: NOW, token: addr(1), lastActivityBlock: null });
+  assert.equal(computeNextPriority(token, NOW + 60), "NORMAL");
+  assert.equal(computeNextPriority(token, NOW + 16 * 60), "LOW");
+});
+
+test("a token that has never traded is LOW even with a recent (risk-only) signal", () => {
+  recordSignal(addr(1), fakeSignal({ type: "THIN_LIQUIDITY", timestamp: NOW - 100 }));
+  const token = getMonitoredTokenFixture({ firstDetectedAt: NOW - 100_000, token: addr(1), lastActivityBlock: null });
+  assert.equal(computeNextPriority(token, NOW), "LOW");
 });
 
 test("an old token with a signal inside the radar-like window is HIGH priority", () => {
@@ -248,9 +260,10 @@ test("runRetentionCycle never removes recent data", () => {
 
 // ---------- helpers for priority tests ----------
 
-function getMonitoredTokenFixture(overrides: { firstDetectedAt: number; token: `0x${string}` }) {
+function getMonitoredTokenFixture(overrides: { firstDetectedAt: number; token: `0x${string}`; lastActivityBlock?: number | null }) {
   upsertDiscovered(overrides.token, overrides.firstDetectedAt);
-  return getMonitoredToken(overrides.token)!;
+  const t = getMonitoredToken(overrides.token)!;
+  return { ...t, lastActivityBlock: overrides.lastActivityBlock === undefined ? 1 : overrides.lastActivityBlock };
 }
 
 function fakeSignal(overrides: Partial<Signal> = {}): Signal {

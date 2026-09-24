@@ -157,6 +157,22 @@ function createSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_monitored_status_next_check ON monitored_tokens(status, next_check_at);
   `);
+
+  migrateInPlace(db);
+}
+
+/**
+ * Columns added after launch — existing databases get them in place, so a
+ * deploy never needs a manual migration. Idempotent.
+ *  - monitored_tokens.last_activity_block: newest block a curve trade was
+ *    seen for this token by the activity sweep (monitoring/activitySweep.ts);
+ *    NULL = never.
+ */
+export function migrateInPlace(db: DatabaseSync): void {
+  const cols = db.prepare(`PRAGMA table_info(monitored_tokens)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "last_activity_block")) {
+    db.exec(`ALTER TABLE monitored_tokens ADD COLUMN last_activity_block INTEGER`);
+  }
 }
 
 export function getDb(): DatabaseSync {

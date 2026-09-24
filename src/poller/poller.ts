@@ -1,5 +1,6 @@
 import { config } from "../core/config.js";
 import { runDiscoveryCycle, runMonitoringCycle, runRetentionCycle, rpcBackoff } from "../monitoring/monitoringService.js";
+import { runActivitySweep } from "../monitoring/activitySweep.js";
 
 function logPauseStarted(): void {
   const s = rpcBackoff.state(Math.floor(Date.now() / 1000));
@@ -12,6 +13,7 @@ function logPauseStarted(): void {
 
 let monitoringRunning = false;
 let discoveryRunning = false;
+let sweepRunning = false;
 
 /**
  * The continuous side of FLETCH: without this, snapshots/signals only
@@ -48,16 +50,34 @@ export function startPoller(): () => void {
     void runDiscoveryTick().catch((e) => console.error("Discovery tick failed:", e?.message ?? e));
   const monitoringTick = () =>
     void runMonitoringTick().catch((e) => console.error("Monitoring tick failed:", e?.message ?? e));
+  const sweepTick = () =>
+    void runSweepTick().catch((e) => console.error("Activity sweep failed:", e?.message ?? e));
 
   discoveryTick();
   monitoringTick();
   const discoveryHandle = setInterval(discoveryTick, config.discoveryIntervalMs);
   const monitoringHandle = setInterval(monitoringTick, config.pollIntervalMs);
+  const sweepHandle = setInterval(sweepTick, config.activitySweepIntervalMs);
 
   return () => {
     clearInterval(discoveryHandle);
     clearInterval(monitoringHandle);
+    clearInterval(sweepHandle);
   };
+}
+
+async function runSweepTick(): Promise<void> {
+  if (sweepRunning) return;
+  sweepRunning = true;
+  try {
+    const r = await runActivitySweep();
+    if (r.rateLimitStarted) logPauseStarted();
+    if (r.promoted > 0 || r.demoted > 0) {
+      console.log(`Activity sweep: ${r.curvesWatched} curves, ${r.tradesSeen} trade(s) → ${r.promoted} token(s) now HIGH, ${r.demoted} quiet launch(es) → LOW.`);
+    }
+  } finally {
+    sweepRunning = false;
+  }
 }
 
 async function runDiscoveryTick(): Promise<void> {

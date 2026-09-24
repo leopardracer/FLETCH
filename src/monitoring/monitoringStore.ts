@@ -22,6 +22,8 @@ export interface MonitoredToken {
    *  later check. Null if this token was added to the queue without one
    *  (shouldn't normally happen, but handled honestly rather than assumed). */
   launch: DetectedLaunch | null;
+  /** Newest block the activity sweep saw a curve trade for this token; null = never. */
+  lastActivityBlock: number | null;
 }
 
 /** DetectedLaunch has two bigint fields, which JSON can't represent natively. */
@@ -62,7 +64,8 @@ export function upsertDiscovered(
   token: `0x${string}`,
   now: number,
   priority: MonitoringPriority = "HIGH",
-  launch: DetectedLaunch | null = null
+  launch: DetectedLaunch | null = null,
+  firstCheckAt: number = now
 ): boolean {
   const db = getDb();
   const existing = db.prepare(`SELECT token FROM monitored_tokens WHERE token = ?`).get(token.toLowerCase());
@@ -72,7 +75,7 @@ export function upsertDiscovered(
     `INSERT INTO monitored_tokens
       (token, first_detected_at, last_checked_at, last_success_at, next_check_at, status, phase, failure_count, last_error, priority, updated_at, launch_json)
      VALUES (?, ?, NULL, NULL, ?, 'ACTIVE', NULL, 0, NULL, ?, ?, ?)`
-  ).run(token.toLowerCase(), now, now, priority, now, launch ? serializeLaunch(launch) : null); // next_check_at = now: a fresh discovery is due immediately
+  ).run(token.toLowerCase(), now, firstCheckAt, priority, now, launch ? serializeLaunch(launch) : null); // first full check at firstCheckAt (default: now)
   return true;
 }
 
@@ -95,6 +98,7 @@ interface MonitoredTokenRow {
   priority: MonitoringPriority;
   updated_at: number;
   launch_json: string | null;
+  last_activity_block?: number | null;
 }
 
 export function getDueForCheck(now: number, limit: number): MonitoredToken[] {
@@ -254,7 +258,64 @@ function rowToMonitoredToken(row: MonitoredTokenRow): MonitoredToken {
     priority: row.priority,
     updatedAt: row.updated_at,
     launch: deserializeLaunch(row.launch_json ?? null),
+    lastActivityBlock: row.last_activity_block ?? null,
   };
+}
+
+/** Every ACTIVE token with a known curve — what the activity sweep watches. */
+export function listActiveCurves(): { token: string; curve: string; launchBlock: number | null }[] {
+  const rows = getDb()
+    .prepare(`SELECT token, launch_json FROM monitored_tokens WHERE status = 'ACTIVE' AND launch_json IS NOT NULL`)
+    .all() as { token: string; launch_json: string }[];
+  const out: { token: string; curve: string; launchBlock: number | null }[] = [];
+  for (const r of rows) {
+    const l = deserializeLaunch(r.launch_json);
+    if (l?.curve) out.push({ token: r.token, curve: l.curve.toLowerCase(), launchBlock: l.launchBlock !== undefined ? Number(l.launchBlock) : null });
+  }
+  return out;
+}
+
+/**
+ * A curve trade was just seen for this token: it's live, so it jumps to
+ * HIGH and is due now (an earlier scheduled check is never pushed later).
+ * Returns true if the row was updated.
+ */
+export function markActive(token: string, block: number, now: number): boolean {
+  const r = getDb()
+    .prepare(
+      `UPDATE monitored_tokens
+          SET last_activity_block = MAX(COALESCE(last_activity_block, 0), ?),
+              priority = 'HIGH',
+              next_check_at = MIN(next_check_at, ?),
+              updated_at = ?
+        WHERE token = ? AND status = 'ACTIVE'`
+    )
+    .run(block, now, now, token.toLowerCase());
+  return Number(r.changes) > 0;
+}
+
+/**
+ * New launches that have been watched for `quietAfterSeconds` without a
+ * single curve trade drop to LOW before they ever cost a full check —
+ * most launches on Robinhood Chain never trade at all. They stay in the
+ * queue (and are the first evicted when it's full); if one starts trading
+ * later, the sweep promotes it straight back to HIGH.
+ */
+export function demoteQuietLaunches(now: number, quietAfterSeconds: number, lowIntervalSeconds: number): number {
+  const r = getDb()
+    .prepare(
+      `UPDATE monitored_tokens
+          SET priority = 'LOW',
+              next_check_at = MAX(next_check_at, ?),
+              updated_at = ?
+        WHERE status = 'ACTIVE'
+          AND priority != 'LOW'
+          AND last_activity_block IS NULL
+          AND first_detected_at <= ?
+          AND token NOT IN (SELECT DISTINCT token FROM wallet_trades)`
+    )
+    .run(now + lowIntervalSeconds, now, now - quietAfterSeconds);
+  return Number(r.changes);
 }
 
 /**

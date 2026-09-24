@@ -29,6 +29,7 @@ import type { TokenMetrics } from "../data/types.js";
 import type { SmartMoneyReport } from "../wallets/smartMoney.js";
 import type { SocialReport } from "../social/social.js";
 import { RpcBackoff, isRpcRateLimitError, rpcBackoff } from "../core/rpcBackoff.js";
+import { QUIET_AFTER_SECONDS } from "./activitySweep.js";
 
 export { rpcBackoff };
 
@@ -97,9 +98,12 @@ export async function runDiscoveryCycle(
       skippedCapacity++;
       continue; // bounded queue — a launch storm can't grow storage/RPC load without limit
     }
-    // New launches start HIGH priority — they need real activity to stay
-    // there (see computeNextPriority), but they get a fair first look.
-    if (upsertDiscovered(launch.token, now, "HIGH", launch)) discovered++;
+    // Most launches never trade, so a new launch no longer gets an
+    // immediate full check: it waits at NORMAL while the cheap activity
+    // sweep (activitySweep.ts) watches its curve. A first trade makes it
+    // HIGH and due at once; a launch still quiet after QUIET_AFTER_SECONDS
+    // drops to LOW before it ever costs a full check.
+    if (upsertDiscovered(launch.token, now, "NORMAL", launch, now + QUIET_AFTER_SECONDS)) discovered++;
   }
 
   return { scanned: launches.length, discovered, skippedCapacity, paused: false, rateLimitStarted: false };
@@ -215,8 +219,15 @@ export async function runMonitoringCycle(
  * source of truth for "what counts as active."
  */
 export function computeNextPriority(item: MonitoredToken, now: number): MonitoringPriority {
-  const NEW_LAUNCH_GRACE_SECONDS = 3600; // give every launch a fair first hour at HIGH before demoting a quiet one
-  if (now - item.firstDetectedAt < NEW_LAUNCH_GRACE_SECONDS) return "HIGH";
+  const NEW_LAUNCH_GRACE_SECONDS = 3600; // a launch that is actually trading stays HIGH through its first hour
+  const traded = item.lastActivityBlock !== null || getLastTradeBlock(item.token) !== null;
+  if (now - item.firstDetectedAt < NEW_LAUNCH_GRACE_SECONDS && traded) return "HIGH";
+  if (!traded) {
+    // Still inside its quiet window: waiting for a first trade. Past it: not
+    // worth frequent checks — the sweep re-promotes it on its first trade.
+    // (A never-traded token's signals are static risk facts, not activity.)
+    return now - item.firstDetectedAt < QUIET_AFTER_SECONDS ? "NORMAL" : "LOW";
+  }
 
   const recentSignals = getSignalsForToken(item.token as `0x${string}`, 1);
   if (recentSignals.length === 0) return "LOW";
