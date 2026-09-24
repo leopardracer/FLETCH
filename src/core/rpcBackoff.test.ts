@@ -76,3 +76,27 @@ test("the pause ends on its own at resumeAt", () => {
   assert.equal(b.isPaused(1059), true);
   assert.equal(b.isPaused(1060), false);
 });
+
+
+// Shape seen live from https://rpc.mainnet.chain.robinhood.com under load.
+const http403 = Object.assign(new Error("HTTP request failed."), {
+  shortMessage: "HTTP request failed.",
+  details: "Forbidden",
+  status: 403,
+});
+const http403TextOnly = new Error(
+  'HTTP request failed.\n\nStatus: 403\nURL: https://rpc.mainnet.chain.robinhood.com/\nRequest body: {"method":"eth_getLogs"}'
+);
+
+test("the public RPC's HTTP 403 under load is a rate limit — pause, don't blame the token", () => {
+  assert.equal(isRpcRateLimitError(http403), true);
+  assert.equal(isRpcRateLimitError(Object.assign(new Error("outer"), { cause: http403 })), true);
+  assert.equal(isRpcRateLimitError(http403TextOnly), true, "only the message survived (as stored in last_error)");
+  assert.equal(isDailyQuotaError(http403), false, "a 403 backs off normally, not straight to the daily maximum");
+});
+
+test("a 403 pauses the breaker like a 429 does", () => {
+  const b = new RpcBackoff(30, 600);
+  assert.equal(b.recordRateLimit(1000, http403), true);
+  assert.equal(b.isPaused(1001), true);
+});

@@ -10,6 +10,12 @@ import { config } from "./config.js";
  * perfectly healthy tokens walked toward FAILED for a problem that was
  * never theirs.
  *
+ * Found live again on Robinhood Chain's free public RPC: under load it
+ * answers HTTP 403 Forbidden rather than 429. That was treated as a
+ * per-token failure, so nothing paused, every tick kept hitting the
+ * endpoint, and it stayed blocked — ~6 successful checks an hour out of
+ * a 500-token queue. A 403 from the RPC is now a rate limit too.
+ *
  * Two fixes live here:
  *  - isRpcRateLimitError: tells "the provider said slow down / out of
  *    quota" apart from a real per-token failure.
@@ -53,7 +59,9 @@ function collect(e: unknown): { statuses: number[]; text: string } {
 
 export function isRpcRateLimitError(e: unknown): boolean {
   const { statuses, text } = collect(e);
-  if (statuses.includes(429)) return true;
+  // 403: the public RPC's way of saying "too much from you" (see header).
+  if (statuses.includes(429) || statuses.includes(403)) return true;
+  if (/\bStatus:\s*(429|403)\b/.test(text)) return true;
   return RATE_LIMIT_PATTERNS.some((p) => p.test(text)) || DAILY_QUOTA_PATTERNS.some((p) => p.test(text));
 }
 
