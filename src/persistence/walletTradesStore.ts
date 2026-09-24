@@ -121,6 +121,49 @@ export function getTradeCoverage(token: string): TradeCoverage | null {
   };
 }
 
+/** True if [fromBlock, toBlock] lies entirely inside the curve ranges FLETCH has scanned for this token. */
+export function isRangeScanned(token: string, fromBlock: number, toBlock: number): boolean {
+  const rows = getDb()
+    .prepare(`SELECT from_block, to_block FROM trade_scan_coverage WHERE token = ? ORDER BY from_block ASC`)
+    .all(token.toLowerCase()) as { from_block: number; to_block: number }[];
+  let start: number | null = null;
+  let end = -Infinity;
+  for (const r of rows) {
+    if (start === null || r.from_block > end + 1) {
+      if (start !== null && start <= fromBlock && end >= toBlock) return true;
+      start = r.from_block;
+      end = r.to_block;
+    } else end = Math.max(end, r.to_block);
+  }
+  return start !== null && start <= fromBlock && end >= toBlock;
+}
+
+export interface WindowTradeStats {
+  buys: number;
+  sells: number;
+  /** Pair-asset (ETH) volume, buys + sells. */
+  volume: number;
+}
+
+/**
+ * Buy/sell counts and volume for a block window, from recorded trades —
+ * or null when that window hasn't been fully scanned (then the caller
+ * must read the chain). Lets a check reuse the trades the liquidity scan
+ * just recorded instead of fetching the same logs a second time.
+ */
+export function getWindowTradeStats(token: string, fromBlock: number, toBlock: number): WindowTradeStats | null {
+  if (!isRangeScanned(token, fromBlock, toBlock)) return null;
+  const r = getDb()
+    .prepare(
+      `SELECT SUM(CASE WHEN side = 'buy' THEN 1 ELSE 0 END) AS buys,
+              SUM(CASE WHEN side = 'sell' THEN 1 ELSE 0 END) AS sells,
+              COALESCE(SUM(quote_amount), 0) AS volume
+         FROM wallet_trades WHERE token = ? AND block_number BETWEEN ? AND ?`
+    )
+    .get(token.toLowerCase(), fromBlock, toBlock) as { buys: number | null; sells: number | null; volume: number };
+  return { buys: r.buys ?? 0, sells: r.sells ?? 0, volume: r.volume ?? 0 };
+}
+
 /** Shorthand: the last block of gap-free history from launch, or null. */
 export function getContiguousCoverageFromLaunch(token: string): number | null {
   return getTradeCoverage(token)?.coveredThrough ?? null;

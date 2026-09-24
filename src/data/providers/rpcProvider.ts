@@ -1,5 +1,5 @@
 import { attributeByTokenFlow } from "../../chain/curveTrades.js";
-import { recordCurveScan } from "../../persistence/walletTradesStore.js";
+import { recordCurveScan, getWindowTradeStats } from "../../persistence/walletTradesStore.js";
 import { formatUnits } from "viem";
 import { getClient } from "../../chain/client.js";
 import { scanRecentLaunches } from "../../chain/hunt.js";
@@ -97,7 +97,21 @@ export class RpcChainDataProvider implements ChainDataProvider {
     let volumePairAssetWindow: number | null = null;
 
     const launch = await readLaunchRecord(address);
-    if (launch.found) {
+    // The liquidity read above just scanned and recorded this curve's trades
+    // through the head; if the whole window is covered, count it from those
+    // instead of fetching the same Buy/Sell logs a second time. Found live:
+    // on the public RPC every saved call is a check that isn't rate-limited.
+    const scan = liquidity.tradeScan;
+    const windowFrom = scan ? BigInt(scan.toBlock) - config.maxHolderScanBlocks : null; // same window boundedScanStart gives
+    const fromStore =
+      launch.found && scan && windowFrom !== null
+        ? getWindowTradeStats(address, Number(windowFrom > launch.launchBlock ? windowFrom : launch.launchBlock), scan.toBlock)
+        : null;
+    if (fromStore) {
+      buyCountWindow = fromStore.buys;
+      sellCountWindow = fromStore.sells;
+      volumePairAssetWindow = fromStore.volume;
+    } else if (launch.found) {
       const client = getClient();
       const latest = await client.getBlockNumber();
       const { fromBlock } = boundedScanStart(launch.launchBlock, latest, true, config.maxHolderScanBlocks);

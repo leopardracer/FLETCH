@@ -1,7 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { useInMemoryDbForTests } from "./db.js";
-import { recordCurveScan, getContiguousCoverageFromLaunch, getTradesForWallet, type CurveTrade } from "./walletTradesStore.js";
+import { recordCurveScan, getContiguousCoverageFromLaunch, getTradesForWallet, isRangeScanned, getWindowTradeStats, type CurveTrade } from "./walletTradesStore.js";
 
 const TOKEN = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
 const WALLET = "0xcccccccccccccccccccccccccccccccccccccccc" as const;
@@ -94,4 +94,22 @@ test("getLatestTradePrice returns the most recent trade's own price, or null", a
   assert.equal(getLatestTradePrice(TOKEN), null);
   recordCurveScan(TOKEN, 100, 100, 200, [trade({ txHash: "0x01", blockNumber: 110, tokenAmount: 1000, quoteAmount: 1 }), trade({ txHash: "0x02", blockNumber: 150, tokenAmount: 1000, quoteAmount: 3 })]);
   assert.equal(getLatestTradePrice(TOKEN), 0.003);
+});
+
+
+test("window stats come from recorded trades only when the whole window was scanned", () => {
+  const T = "0x9999999999999999999999999999999999999999" as const;
+  const W = "0x1111111111111111111111111111111111111111" as const;
+  let n = 0;
+  const tr = (side: "buy" | "sell", eth: number, block: number) => ({
+    wallet: W, side, quoteAmount: eth, tokenAmount: 10, blockNumber: block, logIndex: ++n, txHash: ("0x" + n.toString(16).padStart(64, "0")) as `0x${string}`,
+  });
+  recordCurveScan(T, 100, 100, 500, [tr("buy", 1, 150), tr("sell", 0.5, 480)]);
+  recordCurveScan(T, 100, 501, 900, [tr("buy", 2, 600), tr("buy", 0.25, 899)]);
+  assert.equal(isRangeScanned(T, 120, 900), true, "adjacent scans merge");
+  assert.deepEqual(getWindowTradeStats(T, 400, 900), { buys: 2, sells: 1, volume: 2.75 });
+  assert.equal(getWindowTradeStats(T, 400, 950), null, "the head beyond the last scan isn't covered → read the chain");
+  recordCurveScan(T, 100, 1000, 1200, []);
+  assert.equal(isRangeScanned(T, 800, 1100), false, "a gap (901-999) means not covered");
+  assert.deepEqual(getWindowTradeStats(T, 1000, 1200), { buys: 0, sells: 0, volume: 0 }, "scanned and quiet is a real zero");
 });

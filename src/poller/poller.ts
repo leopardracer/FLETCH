@@ -57,12 +57,20 @@ export function startPoller(): () => void {
   monitoringTick();
   const discoveryHandle = setInterval(discoveryTick, config.discoveryIntervalMs);
   const monitoringHandle = setInterval(monitoringTick, config.pollIntervalMs);
-  const sweepHandle = setInterval(sweepTick, config.activitySweepIntervalMs);
+  // Offset from the discovery+monitoring burst at start-up so the three
+  // don't hit the RPC in the same second (found live: a fresh deploy tripped
+  // the rate limit within two minutes).
+  let sweepHandle: ReturnType<typeof setInterval> | undefined;
+  const sweepStart = setTimeout(() => {
+    sweepTick();
+    sweepHandle = setInterval(sweepTick, config.activitySweepIntervalMs);
+  }, Math.min(30_000, config.activitySweepIntervalMs / 2));
 
   return () => {
     clearInterval(discoveryHandle);
     clearInterval(monitoringHandle);
-    clearInterval(sweepHandle);
+    clearTimeout(sweepStart);
+    if (sweepHandle) clearInterval(sweepHandle);
   };
 }
 
