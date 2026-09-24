@@ -230,7 +230,16 @@ footer nav a{display:inline-flex;align-items:center;gap:8px}
 .token p{margin:20px 0 0;color:#EBD0DB;max-width:36em}
 .ca{border:2px dashed rgba(255,194,216,.4);border-radius:18px;padding:22px}
 .ca small{display:block;font-size:14px;color:#C9A9B6}
-.ca b{display:block;margin-top:8px;font-family:var(--chain);font-size:clamp(15px,1.6vw,19px);color:#fff}
+.ca b{display:block;margin-top:8px;font-family:var(--chain);font-size:clamp(15px,1.6vw,19px);color:#fff;word-break:break-all}
+.ca-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.copy{display:inline-flex;align-items:center;gap:7px;font:inherit;font-family:var(--display);font-variation-settings:"wdth" 112;font-weight:800;font-size:14px;color:var(--ink);background:var(--pink);border:0;border-radius:10px;padding:7px 12px;cursor:pointer}
+.copy svg{width:15px;height:15px}
+.copy:hover{filter:brightness(1.08)}
+.copy:disabled{background:rgba(255,194,216,.12);color:#9C7F8B;cursor:not-allowed;filter:none}
+.copy.done{background:var(--buy)}
+.ca.ca-live{border-style:solid;border-color:var(--pink)}
+.ca b a{color:#fff;text-decoration:none}
+.ca b a:hover{text-decoration:underline}
 .ca p{margin-top:14px;font-size:14.5px;color:#C9A9B6}
 
 /* ---------- faq ---------- */
@@ -352,10 +361,16 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       <h2 class="d3">There is no FLETCH token yet.</h2>
       <p>If one ever launches, its real address will appear here first. Within a day of any real launch there will be copies with the same name and a nicer logo — check the address here and in the GitHub repository before you trust it anywhere else.</p>
     </div>
-    <div class="ca">
-      <small>Contract address</small>
-      <b>Not launched</b>
-      <p>FLETCH doesn't fabricate an address any more than it fabricates a chain read.</p>
+    <!-- When $FLETCH launches, put its address in data-ca — the box, the Copy button and the explorer link fill themselves in. Nothing else to edit. -->
+    <div class="ca" id="ca" data-ca="">
+      <div class="ca-top"><small>Contract address</small>
+        <button type="button" class="copy" id="ca-copy" disabled aria-describedby="ca-value">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          <span id="ca-copy-label">Copy</span>
+        </button>
+      </div>
+      <b id="ca-value">Not launched</b>
+      <p id="ca-note">FLETCH doesn't fabricate an address any more than it fabricates a chain read. Copy turns on the moment the real one is here.</p>
     </div>
   </div>
 </section>
@@ -646,6 +661,25 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       $("board").innerHTML = '<p class="quiet">Couldn\'t reach the radar just now. Open it in the app.</p>';
     });
   }
+
+  // ---- contract address box ----
+  (function () {
+    var box = $("ca"), btn = $("ca-copy"), label = $("ca-copy-label");
+    var ca = (box.getAttribute("data-ca") || "").trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(ca)) return; // not launched: button stays off
+    box.classList.add("ca-live");
+    $("ca-value").innerHTML = '<a href="https://robinhoodchain.blockscout.com/token/' + ca + '" target="_blank" rel="noopener">' + ca + "</a>";
+    $("ca-note").textContent = "The only real $FLETCH address. Check it against the GitHub repository before you trust it anywhere else.";
+    btn.disabled = false;
+    btn.addEventListener("click", function () {
+      function ok() { label.textContent = "Copied"; btn.classList.add("done"); setTimeout(function () { label.textContent = "Copy"; btn.classList.remove("done"); }, 1600); }
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(ca).then(ok, fallback); } else { fallback(); }
+      function fallback() {
+        var t = document.createElement("textarea"); t.value = ca; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+        document.body.appendChild(t); t.select(); try { document.execCommand("copy"); ok(); } catch (e) { label.textContent = "Select and copy"; } document.body.removeChild(t);
+      }
+    });
+  })();
 
   tape(); numbers(); radar();
   setInterval(tape, 30000); setInterval(numbers, 30000); setInterval(radar, 60000);
