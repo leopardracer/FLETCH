@@ -422,54 +422,71 @@ async function renderOverview() {
   }
 }
 
+const walletsState = { sort: "active", hours: 24 };
+
+function ethAmt(v) {
+  if (typeof v !== "number" || !isFinite(v)) return "—";
+  if (v === 0) return "0";
+  const a = Math.abs(v);
+  const r = a >= 100 ? v.toFixed(1) : a >= 1 ? v.toFixed(2) : a >= 0.01 ? v.toFixed(3) : v.toFixed(4);
+  return String(Number(r));
+}
+
 async function renderWalletsView() {
   renderNav("wallets");
+  const tab = (id, label) => `<button class="seg-btn${walletsState.sort === id ? " on" : ""}" data-sort="${id}">${label}</button>`;
+  const win = (h, label) => `<button class="seg-btn${walletsState.hours === h ? " on" : ""}" data-hours="${h}">${label}</button>`;
   app.innerHTML = `
     <div class="section-head">
-      <div><h1>Wallets</h1><p>Net accumulators across the most recently launched tokens. Scoped per-token — see note on each row; there is no cross-token wallet history yet.</p></div>
+      <div><h1>Wallets</h1><p>Who is trading on Pons V2 curves right now — from FLETCH's own recorded trades, every amount in ETH. Open a wallet for its full history, real PnL and linked wallets.</p></div>
+    </div>
+    <div class="wl-controls">
+      <div class="seg" role="tablist">${tab("active", "Most active")}${tab("buyers", "Biggest buyers")}${tab("sellers", "Biggest sellers")}</div>
+      <div class="seg">${win(1, "1h")}${win(24, "24h")}${win(168, "7d")}</div>
     </div>
     <div id="wallets-body">${loadingLine()}</div>
   `;
+  app.querySelectorAll("[data-sort]").forEach((b) => b.addEventListener("click", () => { walletsState.sort = b.dataset.sort; renderWalletsView(); }));
+  app.querySelectorAll("[data-hours]").forEach((b) => b.addEventListener("click", () => { walletsState.hours = Number(b.dataset.hours); renderWalletsView(); }));
   const body = document.getElementById("wallets-body");
   try {
-    const feed = await getJSON("/api/tokens");
-    const top = (feed.tokens || []).slice(0, 5);
-    const perToken = await Promise.all(
-      top.map(async (t) => {
-        const w = await getJSON(`/api/tokens/${t.token}/wallets`).catch(() => ({ wallets: [] }));
-        return { token: t, wallets: (w.wallets || []).slice(0, 5) };
-      })
-    );
-    const anyWallets = perToken.some((p) => p.wallets.length > 0);
-    if (!anyWallets) {
-      body.innerHTML = stateBlock("empty", "NO WALLET ACTIVITY", "No wallet activity found across the current feed window.");
+    const d = await getJSON(`/api/wallets?sort=${walletsState.sort}&hours=${walletsState.hours}&limit=30`);
+    if (!d.wallets || d.wallets.length === 0) {
+      body.innerHTML = stateBlock(
+        "empty",
+        "NO CURVE TRADES IN THIS WINDOW",
+        d.latestBlock === null
+          ? "FLETCH hasn't recorded any curve trades yet — they appear here as monitored launches are checked."
+          : `No trades recorded in the last ${walletsState.hours === 168 ? "7 days" : walletsState.hours + "h"}. Try a longer window.`
+      );
       return;
     }
-    body.outerHTML = `<div id="wallets-body">${perToken
-      .filter((p) => p.wallets.length > 0)
-      .map(
-        (p) => `
-        <div class="panel-block">
-          <h2>${p.token.symbol ? "$" + esc(p.token.symbol) : fmtAddr(p.token.token)}</h2>
-          <table class="feed">
-            <thead><tr><th>Wallet</th><th>Net accumulation</th><th>Scope</th></tr></thead>
-            <tbody>
-              ${p.wallets
-                .map(
-                  (w) => `<tr>
-                    <td class="addr">${fmtAddr(w.wallet)}</td>
-                    <td>${w.tokensTraded ?? "—"}</td>
-                    <td style="color:var(--ink-faint);font-size:12px">${w.note || ""}</td>
-                  </tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </div>`
-      )
-      .join("")}</div>`;
+    const blocksAgo = (blk) => {
+      const mins = Math.round(((d.latestBlock - blk) / d.blocksPerHour) * 60);
+      return mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+    };
+    const rows = d.wallets
+      .map((w, i) => `
+        <tr onclick="location.hash='#/wallet/${esc(w.wallet)}'">
+          <td class="wl-rank">${i + 1}</td>
+          <td class="addr">${fmtAddr(w.wallet)}</td>
+          <td>${w.trades} <span class="wl-split"><span class="pos">${w.buys}↑</span> <span class="neg">${w.sells}↓</span></span></td>
+          <td>${w.tokens}</td>
+          <td class="num">${ethAmt(w.ethBought)}</td>
+          <td class="num">${ethAmt(w.ethSold)}</td>
+          <td class="num ${w.netFlow > 0 ? "pos" : w.netFlow < 0 ? "neg" : ""}">${w.netFlow > 0 ? "+" : ""}${ethAmt(w.netFlow)}</td>
+          <td class="wl-seen">${blocksAgo(w.lastBlock)}</td>
+        </tr>`)
+      .join("");
+    body.innerHTML = `
+      <div class="wl-summary"><b>${d.totalWallets.toLocaleString("en-US")}</b> wallets · <b>${d.totalTrades.toLocaleString("en-US")}</b> curve trades in the window</div>
+      <div class="table-wrap"><table class="feed wl-table">
+        <thead><tr><th>#</th><th>Wallet</th><th>Trades</th><th>Tokens</th><th class="num">Bought, ETH</th><th class="num">Sold, ETH</th><th class="num">Net flow</th><th>Last trade</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="wl-note">Net flow = ETH received from sells minus ETH spent on buys inside this window. It's cash flow, not profit — a wallet that bought earlier and sold now shows positive flow either way. Each wallet's page has cost-basis PnL.</p>`;
   } catch (e) {
-    body.innerHTML = stateBlock("error", "COULDN'T LOAD WALLET ACTIVITY", e.message);
+    body.innerHTML = stateBlock("error", "COULDN'T LOAD WALLETS", e.message);
   }
 }
 

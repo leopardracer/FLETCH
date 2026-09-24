@@ -403,3 +403,18 @@ test("GET /api/search: empty query, text query and full address — answered fro
   assert.equal(b.kind, "address");
   assert.equal(b.isToken, false, "an address FLETCH has never seen as a token → the client treats it as a wallet");
 });
+
+
+test("GET /api/wallets: empty database gives an honest empty leaderboard with its window", async () => {
+  const r = await fetch(`${baseUrl}/api/wallets?hours=1&sort=buyers`);
+  assert.equal(r.status, 200);
+  const b = await r.json();
+  assert.equal(b.hours, 1);
+  assert.equal(b.sort, "buyers");
+  assert.equal(b.windowBlocks, 14_000);
+  assert.equal(b.latestBlock, null);
+  assert.deepEqual(b.wallets, []);
+  const bad = await (await fetch(`${baseUrl}/api/wallets?sort=nonsense&hours=-5`)).json();
+  assert.equal(bad.sort, "active");
+  assert.equal(bad.hours, 24);
+});

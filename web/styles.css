@@ -957,3 +957,25 @@ footer { max-width: 900px; margin: 0 auto; line-height: 1.6; }
   .search-results { width: 100%; }
   .search-kbd { display: none; }
 }
+
+
+/* ================= wallets leaderboard ================= */
+.wl-controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin: 0 0 16px; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg-btn { font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); background: none; border: 0; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+.seg-btn:hover { color: var(--ink); }
+.seg-btn.on { background: var(--pink); color: #fff; }
+.wl-summary { font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); margin: 0 0 10px; }
+.wl-summary b { color: var(--ink); }
+.wl-table td, .wl-table th { white-space: nowrap; }
+.wl-table .num { text-align: right; font-family: var(--mono); }
+.wl-table .wl-rank { color: var(--ink-faint); font-family: var(--mono); width: 28px; }
+.wl-split { font-family: var(--mono); font-size: 11.5px; margin-left: 6px; }
+.wl-seen { color: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
+.wl-table .pos { color: var(--green); } .wl-table .neg { color: var(--red); }
+.wl-note { font-size: 12px; color: var(--ink-faint); line-height: 1.5; margin: 12px 0 0; max-width: 760px; }
+.seg-btn { white-space: nowrap; }
+@media (max-width: 640px) {
+  .seg-btn { padding: 7px 9px; font-size: 12px; }
+  .wl-controls .seg:first-child { width: 100%; justify-content: space-between; }
+}

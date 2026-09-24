@@ -33,6 +33,7 @@ import { buildWalletFacts } from "../ai/walletExplain.js";
 import type { WhyIsItMoving } from "../ai/explain.js";
 import { runChatAgent, createDefaultAgentDeps } from "../ai/chatAgent.js";
 import { searchTokens, isKnownToken, isFullAddress } from "../persistence/searchStore.js";
+import { getWalletLeaderboard, type LeaderboardSort } from "../persistence/walletLeaderboard.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -117,6 +118,9 @@ const FEED_CACHE_SECONDS = 90;
 const REPORT_FRESH_SECONDS = 300;
 /** The cached feed only lists tokens whose report is at most this old. */
 const FEED_REPORT_MAX_AGE_SECONDS = 3 * 3600;
+
+/** Robinhood Chain produces roughly this many blocks an hour (measured live). */
+const BLOCKS_PER_HOUR = 14_000;
 
 /** How long a computed market brief is reused before the radar/signal feed is re-read. */
 const BRIEF_CACHE_SECONDS = 120;
@@ -440,6 +444,19 @@ export function createServer(options?: {
     const activity = await provider.getWalletActivity(address);
     res.json({ address, wallets: activity });
   }));
+
+  // Wallets page: who is trading on Pons V2 curves in the window, from
+  // FLETCH's own recorded trades (no chain read). Window is in hours,
+  // converted to blocks at Robinhood Chain's ~14,000 blocks/hour.
+  app.get("/api/wallets", (req, res) => {
+    const h = Number(req.query.hours);
+    const hours = Number.isFinite(h) && h >= 1 ? Math.min(24 * 7, Math.floor(h)) : 24;
+    const sort = (["active", "buyers", "sellers"] as const).includes(req.query.sort as LeaderboardSort)
+      ? (req.query.sort as LeaderboardSort)
+      : "active";
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 25));
+    res.json({ hours, blocksPerHour: BLOCKS_PER_HOUR, ...getWalletLeaderboard({ windowBlocks: hours * BLOCKS_PER_HOUR, sort, limit }) });
+  });
 
   // Wallet-level intelligence — see wallets/walletScore.ts for exactly what's
   // real (participation record) vs. NOT_YET_IMPLEMENTED (PnL, win rate).
