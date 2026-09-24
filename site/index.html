@@ -269,6 +269,70 @@ footer a{text-decoration:none;font-weight:600;color:#FFE8F0}
 footer a:hover{color:var(--pink)}
 footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
+/* ---------- motion ----------
+   Everything below is progressive: without JS (or with reduced motion) the
+   page is fully visible and static. JS adds .js to <html> and .in to
+   elements as they scroll into view. */
+@keyframes rise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+@keyframes lineUp{from{transform:translateY(105%)}to{transform:none}}
+@keyframes pop{0%{opacity:0;transform:scale(.85)}60%{opacity:1;transform:scale(1.04)}100%{opacity:1;transform:none}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes hop{0%,100%{transform:translateY(0)}35%{transform:translateY(-22px) rotate(-4deg)}70%{transform:translateY(0) scaleY(.94)}}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-6deg)}75%{transform:rotate(5deg)}}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes drift{from{background-position:0 0}to{background-position:44px 44px}}
+
+/* hero entrance: each headline line slides up out of its own mask */
+.js .hero h1 span{display:block;overflow:hidden}
+.js .hero h1 span > i{display:block;font-style:normal;transform:translateY(105%);animation:lineUp .8s cubic-bezier(.2,.8,.2,1) forwards}
+.js .hero h1 span:nth-child(2) > i{animation-delay:.08s}
+.js .hero h1 span:nth-child(3) > i{animation-delay:.22s}
+.js .hero h1 span:nth-child(4) > i{animation-delay:.3s}
+.js .hero .lede,.js .hero .ctas,.js .hero .note{opacity:0;animation:rise .7s ease .45s forwards}
+.js .hero .ctas{animation-delay:.6s}.js .hero .note{animation-delay:.72s}
+.js .tape{opacity:0;animation:pop .7s cubic-bezier(.2,1.2,.4,1) .35s forwards}
+.hero{background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.13) 1px,transparent 1.6px);background-size:22px 22px;animation:drift 6s linear infinite}
+
+/* the cats */
+.tape-wrap .cat,.final .cat{cursor:pointer;pointer-events:auto;transform-origin:50% 100%}
+.tape-wrap .cat{animation:bob 2.8s ease-in-out infinite}
+.cat.hop{animation:hop .55s ease-in-out !important}
+.nav .brand img.cat{transform-origin:50% 100%}
+.nav .brand:hover img.cat{animation:wiggle .5s ease-in-out}
+.say{position:absolute;z-index:5;background:var(--ink);color:#fff;font-weight:700;font-size:14px;line-height:1.3;padding:8px 12px;border-radius:12px 12px 12px 3px;white-space:nowrap;pointer-events:none;opacity:0;transform:translateY(6px) scale(.9);transform-origin:0 100%;transition:opacity .2s ease,transform .25s cubic-bezier(.2,1.4,.4,1)}
+.say.on{opacity:1;transform:none}
+.say em{font-style:normal;color:var(--pink)}
+.tape-wrap .say{right:128px;top:10px}
+.final .say{right:calc(max(var(--gutter), calc((100vw - var(--wrap))/2 + var(--gutter))) + clamp(120px,16vw,230px) - 10px);bottom:clamp(120px,15vw,200px);border-radius:12px 12px 3px 12px;transform-origin:100% 100%}
+
+/* live ticker band between the hero and the rest */
+.ticker{background:var(--ink);color:#FFE8F0;overflow:hidden;white-space:nowrap;border-top:3px solid var(--ink);border-bottom:3px solid var(--ink)}
+.ticker .track{display:inline-flex;gap:44px;padding:13px 0;animation:marquee 60s linear infinite}
+.ticker:hover .track{animation-play-state:paused}
+.ticker a{text-decoration:none;font-size:15px;display:inline-flex;gap:10px;align-items:baseline}
+.ticker a b{color:var(--pink);font-weight:800}
+.ticker a span{color:#C9A9B6;font-size:13px}
+
+/* scroll reveals: headings wipe up, groups stagger */
+.js [data-reveal]{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+.js [data-reveal].in{opacity:1;transform:none}
+.js [data-stagger] > *{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+.js [data-stagger].in > *{opacity:1;transform:none}
+.js [data-stagger].in > *:nth-child(2){transition-delay:.07s}.js [data-stagger].in > *:nth-child(3){transition-delay:.14s}
+.js [data-stagger].in > *:nth-child(4){transition-delay:.21s}.js [data-stagger].in > *:nth-child(5){transition-delay:.28s}
+.js [data-stagger].in > *:nth-child(6){transition-delay:.35s}.js [data-stagger].in > *:nth-child(7){transition-delay:.42s}
+.js [data-stagger].in > *:nth-child(8){transition-delay:.49s}
+.js .board.in .sc i s{transform-origin:0 50%;animation:grow 1s cubic-bezier(.2,.8,.2,1) both}
+.js .road li.in::before{animation:pop .5s cubic-bezier(.2,1.4,.4,1) both}
+.pfps a{animation:bob 3.2s ease-in-out infinite}
+.pfps a:nth-child(2n){animation-delay:.4s}.pfps a:nth-child(3n){animation-delay:.8s}.pfps a:nth-child(4n){animation-delay:1.2s}
+.stickers a:hover img{animation:wiggle .45s ease-in-out}
+.js .final .cat{transform:translateX(120%);transition:transform 1.1s cubic-bezier(.2,.9,.3,1)}
+.js .final.in .cat{transform:none}
+.numbers .n b{transition:color .3s}
+.numbers .n b.tick{color:#fff}
+
 /* ---------- responsive ---------- */
 @media (max-width:1000px){
   .hero .grid,.ai .grid,.oss .grid,.faq .grid,.token .grid,.reads .top{grid-template-columns:minmax(0,1fr)}
@@ -299,6 +363,9 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .js [data-reveal],.js [data-stagger] > *,.js .hero .lede,.js .hero .ctas,.js .hero .note,.js .tape,.js .final .cat{opacity:1!important;transform:none!important}
+  .js .hero h1 span > i{transform:none!important}
+  .ticker .track{white-space:normal;flex-wrap:wrap}
 }
 </style>
 </head>
@@ -334,7 +401,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <section class="pink hero" id="top">
   <div class="wrap grid">
     <div>
-      <h1 class="d1"><span>The meme</span><span>moves first.</span><span class="l2">FLETCH tells</span><span class="l2">you why.</span></h1>
+      <h1 class="d1"><span><i>The meme</i></span><span><i>moves first.</i></span><span class="l2"><i>FLETCH tells</i></span><span class="l2"><i>you why.</i></span></h1>
       <p class="lede">FLETCH reads every launch on Robinhood Chain as it happens — trades, holders, liquidity, wallets and risk — and its AI explains what's moving in plain English. It only ever speaks from on-chain evidence.</p>
       <div class="ctas">
         <a class="btn btn-solid" href="https://app.getfletch.xyz">Open the app</a>
@@ -344,7 +411,8 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
     </div>
 
     <div class="tape-wrap">
-    <img class="cat" src="mascot.png" alt="" width="104" height="98">
+    <img class="cat" id="cat-tape" src="mascot.png" alt="" width="104" height="98" title="Pet the cat">
+    <span class="say" id="say-tape" aria-hidden="true"></span>
     <div class="tape on-dark" aria-live="polite" id="live">
       <header><b>What FLETCH just saw</b><span class="live off" id="tape-status"><i></i><span>connecting</span></span></header>
       <ul class="rows" id="tape-rows"><li class="empty">Reading Robinhood Chain…</li></ul>
@@ -353,6 +421,9 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
     </div>
   </div>
 </section>
+
+<!-- LIVE TICKER -->
+<div class="ticker" aria-label="Latest signals" id="ticker" hidden><div class="track" id="ticker-track"></div></div>
 
 <!-- TOKEN -->
 <section class="wine token on-dark" id="token">
@@ -378,7 +449,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <!-- LIVE NUMBERS -->
 <section class="wine numbers on-dark">
   <div class="wrap">
-    <div class="row">
+    <div class="row" data-stagger>
       <div class="n"><b id="n-watched">—</b><span>tokens FLETCH is watching</span></div>
       <div class="n"><b id="n-signals">—</b><span>signals in the last hour</span></div>
       <div class="n"><b id="n-dead">—</b><span>launches it has called dead</span></div>
@@ -392,10 +463,10 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <section class="paper reads pad">
   <div class="wrap">
     <div class="top">
-      <h2 class="d2">It reads the chain, not the chart.</h2>
+      <h2 class="d2" data-reveal>It reads the chain, not the chart.</h2>
       <p class="lede">A price is the result. FLETCH reads what caused it, straight from Robinhood Chain and the Pons V2 launchpad — no scraped lists, no seed data, nothing invented.</p>
     </div>
-    <dl>
+    <dl data-stagger>
       <div><dt>Launches</dt><dd>Every new token the moment Pons V2 deploys it, with who launched it and what they bought.</dd></div>
       <div><dt>Trades</dt><dd>Every buy and sell on the bonding curve, credited to the real wallet — not the router in between.</dd></div>
       <div><dt>Holders</dt><dd>Exact holder counts from launch, block by block. With fewer than ten holders it says so instead of faking a percentage.</dd></div>
@@ -411,16 +482,16 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <section class="wine ai pad on-dark" id="ai">
   <div class="wrap grid">
     <div>
-      <h2 class="d2">An analyst that can't make things up.</h2>
+      <h2 class="d2" data-reveal>An analyst that can't make things up.</h2>
       <p class="lede">FLETCH AI never sees raw chain data and never works from memory. It only explains what FLETCH's own engine already proved on-chain — and when the data isn't there, it says so.</p>
-      <ul>
+      <ul data-stagger>
         <li><b>Market brief</b><span>What happened on Robinhood Chain in the last hour, in one paragraph.</span></li>
         <li><b>Token analyst</b><span>Why a token is moving and what the risks are, on every token page.</span></li>
         <li><b>Wallet read</b><span>How a wallet trades: realized and unrealized PnL, win rate, how early it gets in.</span></li>
         <li><b>Ask FLETCH AI</b><span>Chat with the chain — tokens, wallets, whales, rugs, what's moving right now.</span></li>
       </ul>
     </div>
-    <div class="chat">
+    <div class="chat" data-stagger>
       <p class="note">An example conversation. The token is made up; the shape is real.</p>
       <div class="bubble me">Any whales on Robinhood Chain in the last hour?</div>
       <div class="bubble bot"><span class="tool">Looked up recent signals</span>One whale bought 52,400 tokens straight off the curve of <span class="chain">0x71fa…c92e</span>. Buys outnumber sells 14 to 3, and holder concentration is medium. FLETCH doesn't forecast where it goes from here.</div>
@@ -435,12 +506,12 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   <div class="wrap">
     <div class="head">
       <div>
-        <h2 class="d2">What's moving right now</h2>
+        <h2 class="d2" data-reveal>What's moving right now</h2>
         <p class="lede">Radar ranks tokens by how much is changing on-chain in the last half hour — not by size, not by hype. Live from the app.</p>
       </div>
       <a class="btn btn-solid" href="https://app.getfletch.xyz/#/radar">Open the radar</a>
     </div>
-    <div class="board" id="board"><p class="quiet">Reading the radar…</p></div>
+    <div class="board" id="board" data-stagger><p class="quiet">Reading the radar…</p></div>
   </div>
 </section>
 
@@ -448,7 +519,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <section class="paper oss pad" id="open-source">
   <div class="wrap grid">
     <div>
-      <h2 class="d2">Open source. Run your own.</h2>
+      <h2 class="d2" data-reveal>Open source. Run your own.</h2>
       <p class="lede">Every number FLETCH shows can be checked against its code. Clone it, point it at Robinhood Chain's free public RPC, and the same feed runs on your machine.</p>
 <div class="cmd"><span class="p">$</span> git clone https://github.com/leopardracer/FLETCH
 <span class="p">$</span> cd FLETCH &amp;&amp; npm install
@@ -459,7 +530,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       </div>
     </div>
     <div>
-      <div class="facts">
+      <div class="facts" data-stagger>
         <div><b>416</b><span>tests, all passing</span></div>
         <div><b>MIT</b><span>license</span></div>
         <div><b>0</b><span>ways to send a transaction</span></div>
@@ -481,8 +552,8 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <!-- ROADMAP -->
 <section class="wine road pad on-dark">
   <div class="wrap">
-    <h2 class="d2">Built in the open</h2>
-    <ol>
+    <h2 class="d2" data-reveal>Built in the open</h2>
+    <ol data-stagger>
       <li><div><b>Live on chain</b><span>Discovery, risk, score, radar and continuous monitoring, reading Robinhood Chain directly.</span><em>Done</em></div></li>
       <li><div><b>A true baseline</b><span>Activity is compared with each token's own lifetime average, not one fixed threshold.</span><em>Done</em></div></li>
       <li><div><b>Real PnL</b><span>Every curve trade recorded with its exact price — realized and unrealized PnL, win rate, linked wallets.</span><em>Done</em></div></li>
@@ -500,12 +571,12 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   <div class="wrap">
     <div class="head">
       <div>
-        <h2 class="d2">Wear the cat</h2>
+        <h2 class="d2" data-reveal>Wear the cat</h2>
         <p class="lede">Profile pictures and stickers, free to use. Tap one to download it, or grab the whole kit.</p>
       </div>
       <a class="btn btn-solid" href="brand/fletch-community-kit.zip" download>Download the kit</a>
     </div>
-    <div class="pfps">
+    <div class="pfps" data-stagger>
       <a href="brand/pfp/fletch-pfp-classic.png" download><img src="brand/pfp/fletch-pfp-classic.png" alt="Classic FLETCH cat" loading="lazy"></a>
       <a href="brand/pfp/fletch-pfp-detective.png" download><img src="brand/pfp/fletch-pfp-detective.png" alt="Detective cat" loading="lazy"></a>
       <a href="brand/pfp/fletch-pfp-sniper.png" download><img src="brand/pfp/fletch-pfp-sniper.png" alt="Sniper cat" loading="lazy"></a>
@@ -531,7 +602,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 <!-- FAQ -->
 <section class="paper faq pad" id="faq">
   <div class="wrap grid">
-    <h2 class="d2">FAQ</h2>
+    <h2 class="d2" data-reveal>FAQ</h2>
     <div>
       <details><summary>What is FLETCH?</summary><p>A discovery feed, a risk engine and an AI explanation layer for meme tokens on Robinhood Chain. It reads launches, trades, holders, liquidity and wallet behavior directly off the chain.</p></details>
       <details><summary>Where can I use it?</summary><p>At app.getfletch.xyz — free, no sign-up, no wallet connection. Ask FLETCH AI works with your own Anthropic key, which stays in your browser tab.</p></details>
@@ -546,8 +617,9 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 </section>
 
 <!-- FINAL -->
-<section class="pink final">
-  <img class="cat" src="mascot.png" alt="" width="340" height="321" loading="lazy">
+<section class="pink final" id="final">
+  <img class="cat" id="cat-final" src="mascot.png" alt="" width="340" height="321" loading="lazy" title="Pet the cat">
+  <span class="say" id="say-final" aria-hidden="true"></span>
   <div class="wrap">
     <h2 class="d1">Read the chain before you ape.</h2>
     <div class="ctas">
@@ -573,6 +645,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   </div>
 </footer>
 
+<script>document.documentElement.classList.add("js");</script>
 <script>
 /* Live data from the hosted FLETCH — its read-only API allows cross-origin reads.
    Everything a deployer chose (symbols, names) is escaped before it's shown. */
@@ -606,11 +679,20 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   function name(sym, token) { return sym ? "$" + esc(sym) : '<span class="chain">' + esc(short(token)) + "</span>"; }
 
   // ---- the tape ----
-  var seen = {}, firstLoad = true;
+  var seen = {}, firstLoad = true, prevKeys = {};
+  function ticker(all) {
+    var items = all.slice(0, 20); if (!items.length) return;
+    var html = items.map(function (s) {
+      return '<a href="' + APP + "/#/token/" + esc(s.token) + '"><b>' + (s.symbol ? "$" + esc(s.symbol) : esc(short(s.token))) + "</b>" + esc(says(s)) + "<span>" + ago(s.timestamp) + "</span></a>";
+    }).join("");
+    $("ticker-track").innerHTML = html + html.replace(/<a /g, '<a aria-hidden="true" tabindex="-1" '); // doubled for a seamless loop
+    $("ticker").hidden = false;
+  }
   function tape() {
     getJSON("/api/signals?limit=7").then(function (d) {
       var status = $("tape-status");
       var list = (d.signals || []).slice(0, 7);
+      ticker(d.signals || []);
       // "live" only when the newest signal is recent — otherwise say how old it is.
       var newest = list.length ? Math.max.apply(null, list.map(function (s) { return s.timestamp || 0; })) : 0;
       var fresh = newest && (Date.now() / 1000 - newest) < 3600;
@@ -625,6 +707,10 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
         return '<li class="' + cls + '"' + style + '><a href="' + APP + "/#/token/" + esc(s.token) + '"><i class="dot" aria-hidden="true"></i>' +
           '<span class="what"><b>' + name(s.symbol, s.token) + "</b> — " + esc(says(s)) + '</span><span class="ago">' + ago(s.timestamp) + "</span></a></li>";
       }).join("");
+      if (!firstLoad && fresh && list.some(function (s) { return !prevKeys[s.token + s.type + s.timestamp]; })) {
+        var c = $("cat-tape"); if (c) { hop(c); say($("say-tape"), "new one. <em>on the tape</em>.", 2000); }
+      }
+      prevKeys = {}; list.forEach(function (s) { prevKeys[s.token + s.type + s.timestamp] = 1; });
       firstLoad = false;
     }).catch(function () {
       var status = $("tape-status"); status.className = "live off"; status.lastChild.textContent = "offline";
@@ -635,13 +721,13 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   // ---- numbers ----
   function numbers() {
     getJSON("/api/monitoring").then(function (m) {
-      if (m.totalMonitored != null) $("n-watched").textContent = fmt(m.totalMonitored);
-      if (m.signalsLastHour != null) $("n-signals").textContent = fmt(m.signalsLastHour);
-      if (m.deadCount != null) $("n-dead").textContent = fmt(m.deadCount);
+      if (m.totalMonitored != null) countTo($("n-watched"), m.totalMonitored);
+      if (m.signalsLastHour != null) countTo($("n-signals"), m.signalsLastHour);
+      if (m.deadCount != null) countTo($("n-dead"), m.deadCount);
     }).catch(function () {});
     getJSON("/api/health").then(function (h) {
       if (h && h.chain && h.chain.ok) {
-        $("n-block").textContent = fmt(h.chain.blockNumber);
+        countTo($("n-block"), Number(h.chain.blockNumber));
         $("tape-block").innerHTML = 'Block <span class="chain">' + fmt(h.chain.blockNumber) + "</span>";
       }
     }).catch(function () {});
@@ -685,6 +771,41 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       }
     });
   })();
+
+  // ---- scroll reveals ----
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var io = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+  }, { threshold: .15, rootMargin: "0px 0px -8% 0px" }) : null;
+  function watch(el) { if (!io || reduce) { el.classList.add("in"); return; } io.observe(el); }
+  [].forEach.call(document.querySelectorAll("[data-reveal],[data-stagger],.road li,#final"), watch);
+
+  // ---- the cat talks ----
+  var LINES = ["read the chain, <em>not the chart</em>.", "0 guesses today.", "same block again? <em>suspicious</em>.",
+               "i don't predict. <em>i read</em>.", "every number here is <em>on-chain</em>.", "snipers? <em>noted</em>."];
+  var li = 0;
+  function hop(cat) { cat.classList.remove("hop"); void cat.offsetWidth; cat.classList.add("hop"); }
+  function say(bubble, html, ms) { bubble.innerHTML = html; bubble.classList.add("on"); clearTimeout(bubble._t); bubble._t = setTimeout(function () { bubble.classList.remove("on"); }, ms || 2200); }
+  [["cat-tape", "say-tape"], ["cat-final", "say-final"]].forEach(function (p) {
+    var c = $(p[0]), b = $(p[1]); if (!c || !b) return;
+    c.addEventListener("click", function () { hop(c); say(b, LINES[li++ % LINES.length]); });
+  });
+  setTimeout(function () { var c = $("cat-tape"); if (c && !reduce) { hop(c); say($("say-tape"), "gm. <em>reading the chain</em>…", 2600); } }, 1400);
+  var finalSeen = false;
+  if (io && !reduce) new IntersectionObserver(function (es) {
+    if (!finalSeen && es[0].isIntersecting) { finalSeen = true; setTimeout(function () { hop($("cat-final")); say($("say-final"), "your move.", 2400); }, 1100); }
+  }, { threshold: .4 }).observe($("final"));
+
+  // ---- numbers count up the first time, flash when they change ----
+  var shown = {};
+  function countTo(el, to) {
+    var from = shown[el.id] || 0; shown[el.id] = to;
+    if (reduce || from === to) { el.textContent = fmt(to); return; }
+    if (from) { el.classList.add("tick"); setTimeout(function () { el.classList.remove("tick"); }, 500); }
+    var t0 = performance.now(), dur = from ? 600 : 1400;
+    (function step(t) { var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = fmt(Math.round(from + (to - from) * e)); if (k < 1) requestAnimationFrame(step); })(t0);
+  }
 
   tape(); numbers(); radar();
   setInterval(tape, 30000); setInterval(numbers, 30000); setInterval(radar, 60000);
