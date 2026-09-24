@@ -106,8 +106,12 @@ export function getDueForCheck(now: number, limit: number): MonitoredToken[] {
   const priorityRank = `CASE priority WHEN 'HIGH' THEN 0 WHEN 'NORMAL' THEN 1 ELSE 2 END`;
   const rows = db
     .prepare(
+      // Within a priority, the token traded most recently goes first: found
+      // live, hundreds of traded tokens were HIGH at once and the few checks
+      // the public RPC allows went to whichever had waited longest, not to
+      // what was moving now. Never-traded tokens come after traded ones.
       `SELECT * FROM monitored_tokens WHERE status = 'ACTIVE' AND next_check_at <= ?
-       ORDER BY ${priorityRank} ASC, next_check_at ASC LIMIT ?`
+       ORDER BY ${priorityRank} ASC, (last_activity_block IS NULL) ASC, last_activity_block DESC, next_check_at ASC LIMIT ?`
     )
     .all(now, limit) as unknown as MonitoredTokenRow[];
   return rows.map(rowToMonitoredToken);

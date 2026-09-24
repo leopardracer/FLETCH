@@ -10,6 +10,7 @@ import {
   getMonitoredToken,
   countMonitored,
   getMonitoringHealth,
+  markActive,
 } from "./monitoringStore.js";
 
 const TOKEN_A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
@@ -152,4 +153,15 @@ test("a stored launch round-trips exactly, including its bigint fields (launchBl
 test("a token discovered without launch data stores launch as null, not a crash", () => {
   upsertDiscovered(TOKEN_A, NOW);
   assert.equal(getMonitoredToken(TOKEN_A)?.launch, null);
+});
+
+
+test("among due HIGH tokens, the one traded most recently is checked first; never-traded ones last", () => {
+  const T = (n: number) => `0x${n.toString(16).padStart(40, "0")}` as `0x${string}`;
+  for (let i = 1; i <= 4; i++) upsertDiscovered(T(i), NOW - 100, "HIGH");
+  markActive(T(1), 1_000, NOW - 50);   // traded long ago
+  markActive(T(2), 9_000, NOW - 50);   // traded just now
+  markActive(T(3), 5_000, NOW - 50);
+  // T(4): HIGH but never seen trading
+  assert.deepEqual(getDueForCheck(NOW, 10).map((t) => t.token), [T(2), T(3), T(1), T(4)]);
 });

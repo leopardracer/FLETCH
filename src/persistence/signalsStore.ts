@@ -37,12 +37,22 @@ interface SignalRow {
   taken_at: number;
 }
 
-/** Chain-wide recent signals for the live feed, most severe + most recent first. */
+/**
+ * Chain-wide recent signals for the live feed: newest first (severity only
+ * breaks ties at the same moment).
+ *
+ * Found live: this used to sort by severity first, so a day-old CRITICAL
+ * row outranked every fresh HIGH one. The feed (and the landing page's
+ * tape) showed 21-hour-old "supply concentrated" rows as the latest thing
+ * FLETCH saw while dozens of new whale signals were being written every
+ * hour — and the market brief, which takes the first 200 and then filters
+ * to the last hour, silently lost most of the hour it was summarizing.
+ */
 export function getRecentSignals(limit = 50): StoredSignal[] {
   const db = getDb();
   const severityRank = `CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END`;
   const rows = db
-    .prepare(`SELECT * FROM signals ORDER BY ${severityRank} ASC, taken_at DESC LIMIT ?`)
+    .prepare(`SELECT * FROM signals ORDER BY taken_at DESC, ${severityRank} ASC, id DESC LIMIT ?`)
     .all(limit) as unknown as SignalRow[];
   return rows.map(rowToSignal);
 }

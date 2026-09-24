@@ -37,17 +37,22 @@ test("a recorded signal round-trips with every field intact", () => {
   assert.equal(s.timestamp, NOW);
 });
 
-test("the live feed sorts by severity first — CRITICAL before HIGH before MEDIUM before LOW — regardless of insertion order", () => {
+test("the live feed is newest first — an old CRITICAL never outranks what just happened", () => {
+  recordSignal(TOKEN_A, signal({ severity: "CRITICAL", timestamp: NOW - 21 * 3600, evidence: "day-old critical" }));
   recordSignal(TOKEN_A, signal({ severity: "LOW", timestamp: NOW + 300 }));
-  recordSignal(TOKEN_A, signal({ severity: "CRITICAL", timestamp: NOW }));
-  recordSignal(TOKEN_A, signal({ severity: "MEDIUM", timestamp: NOW + 200 }));
   recordSignal(TOKEN_A, signal({ severity: "HIGH", timestamp: NOW + 100 }));
+  recordSignal(TOKEN_A, signal({ severity: "MEDIUM", timestamp: NOW + 200 }));
 
   const feed = getRecentSignals();
-  assert.deepEqual(
-    feed.map((s) => s.severity),
-    ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-  );
+  assert.deepEqual(feed.map((s) => s.severity), ["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+  assert.equal(feed[3].evidence, "day-old critical");
+});
+
+test("severity only breaks ties between signals recorded at the same moment", () => {
+  recordSignal(TOKEN_A, signal({ severity: "LOW", timestamp: NOW }));
+  recordSignal(TOKEN_A, signal({ severity: "CRITICAL", timestamp: NOW }));
+  recordSignal(TOKEN_A, signal({ severity: "HIGH", timestamp: NOW }));
+  assert.deepEqual(getRecentSignals().map((s) => s.severity), ["CRITICAL", "HIGH", "LOW"]);
 });
 
 test("within the same severity, more recent signals come first", () => {
