@@ -340,7 +340,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 /* ---------- motion, round two ---------- */
 @keyframes shine{0%{background-position:-160% 0}100%{background-position:260% 0}}
-@keyframes floatUp{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:.9}100%{transform:translateY(-110vh) rotate(180deg);opacity:0}}
 @keyframes burst{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
 @keyframes rowIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
 @keyframes blink{0%,92%,100%{opacity:1}95%{opacity:.2}}
@@ -354,13 +353,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 .js .hero h1 .l2 i{background:linear-gradient(100deg,var(--blush) 0 42%,#fff 50%,var(--blush) 58% 100%) 100% 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent}
 .js .hero h1 .l2 i.shine{animation:lineUp 0s forwards,textShine 1.4s ease-in-out forwards}  /* keep the line in place; only the light moves */
 .js .hero h1 .l2:nth-child(4) i.shine{animation-delay:0s,.12s}
-
-/* pixels drifting up through the pink sections */
-.pixels{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-.pixels i{position:absolute;bottom:-20px;width:8px;height:8px;background:rgba(255,255,255,.55);animation:floatUp linear infinite}
-.pixels i:nth-child(3n){background:rgba(22,4,12,.35);width:6px;height:6px}
-.pixels i:nth-child(4n){width:12px;height:12px;background:rgba(255,194,216,.6)}
-.hero > .wrap,.final > .wrap{position:relative;z-index:1}
 
 /* buttons: a shine crosses on hover, pixels burst on click */
 .btn{position:relative;overflow:hidden}
@@ -429,7 +421,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   .js [data-reveal],.js [data-stagger] > *,.js .hero .lede,.js .hero .ctas,.js .hero .note,.js .tape,.js .final .cat{opacity:1!important;transform:none!important}
   .js .hero h1 span > i{transform:none!important}
   .ticker .track{white-space:normal;flex-wrap:wrap}
-  .pixels,.progress{display:none}
+  .progress{display:none}
   .js .hero h1 .l2 i{color:var(--blush);background:none}
 }
 </style>
@@ -465,7 +457,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 <!-- HERO -->
 <section class="pink hero" id="top">
-  <div class="pixels" aria-hidden="true"></div>
   <div class="wrap grid">
     <div class="hero-copy">
       <h1 class="d1"><span><i>The meme</i></span><span><i>moves first.</i></span><span class="l2"><i>FLETCH tells</i></span><span class="l2"><i>you why.</i></span></h1>
@@ -685,7 +676,6 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
 
 <!-- FINAL -->
 <section class="pink final" id="final">
-  <div class="pixels" aria-hidden="true"></div>
   <img class="cat" id="cat-final" src="mascot.png" alt="" width="340" height="321" loading="lazy" title="Pet the cat">
   <span class="say" id="say-final" aria-hidden="true"></span>
   <div class="wrap">
@@ -913,17 +903,6 @@ document.documentElement.classList.add("js");
     var pinks = document.querySelectorAll(".hero h1 .l2 i");
     function shine() { pinks.forEach(function (i) { i.classList.remove("shine"); void i.offsetWidth; i.classList.add("shine"); }); }
     setTimeout(shine, 1700); setInterval(shine, 6500);
-
-    // drifting pixels
-    [].forEach.call(document.querySelectorAll(".pixels"), function (box) {
-      for (var n = 0; n < 16; n++) {
-        var p = document.createElement("i");
-        p.style.left = (Math.random() * 100) + "%";
-        p.style.animationDuration = (9 + Math.random() * 12) + "s";
-        p.style.animationDelay = (-Math.random() * 20) + "s";
-        box.appendChild(p);
-      }
-    });
 
     // pixel burst on any button press
     var COLORS = ["#FF2D7A", "#FFC2D8", "#16040C", "#ffffff", "#3BF08A"];
