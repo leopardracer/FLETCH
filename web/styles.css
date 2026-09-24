@@ -1128,3 +1128,13 @@ footer a:hover{color:#fff}
 .ask-fab{background:var(--on-page);color:var(--pink);box-shadow:0 6px 0 rgba(22,4,12,.3)}
 .ask-fab:hover,.ask-fab:focus-visible{background:#2B0C19}
 .search input{background:var(--on-page)}
+
+/* GitHub mark next to every GitHub link */
+.gh{width:1.05em;height:1.05em;flex:none;vertical-align:-.15em}
+footer nav a{display:inline-flex;align-items:center;gap:7px}
+.doc-card-name{display:flex;align-items:center;gap:8px}
+.doc-card-name .gh{color:var(--pink)}
+.gh-link{display:inline-flex;align-items:center;gap:5px;font-weight:700;color:var(--on-page);text-underline-offset:3px}
+.gh-link .gh{vertical-align:0}
+.gh-btn{display:inline-flex;align-items:center;gap:8px;align-self:flex-end;white-space:nowrap;text-decoration:none;font-family:var(--display);font-variation-settings:"wdth" 112;font-weight:800;font-size:15px;color:var(--pink);background:var(--on-page);border-radius:12px;padding:10px 16px;box-shadow:0 6px 0 rgba(22,4,12,.25)}
+.gh-btn:hover{background:#2B0C19}
