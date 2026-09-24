@@ -717,7 +717,31 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
   </div>
 </footer>
 
-<script>document.documentElement.classList.add("js");</script>
+<script>
+document.documentElement.classList.add("js");
+/* A reload always starts at the top. Section links scroll smoothly without
+   leaving "#section" in the address bar, so refreshing never jumps down.
+   A shared link like getfletch.xyz/#faq still opens at that section. */
+(function () {
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+  var reloaded = nav ? nav.type === "reload" : (performance.navigation && performance.navigation.type === 1);
+  if (reloaded) {
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    window.scrollTo(0, 0);
+    addEventListener("load", function () { window.scrollTo(0, 0); });
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    var id = a.getAttribute("href").slice(1), target = id ? document.getElementById(id) : null;
+    if (!target && id !== "top" && id !== "") return;
+    e.preventDefault();
+    (target || document.body).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  });
+})();
+</script>
 <script>
 /* Live data from the hosted FLETCH — its read-only API allows cross-origin reads.
    Everything a deployer chose (symbols, names) is escaped before it's shown. */
