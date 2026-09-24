@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-386%20passing-D9316A?style=flat-square&labelColor=15050A">
-  <img alt="coverage" src="https://img.shields.io/badge/coverage-88.5%25-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-429%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="coverage" src="https://img.shields.io/badge/coverage-89.1%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="runtime deps" src="https://img.shields.io/badge/runtime%20deps-7-F5E8EC?style=flat-square&labelColor=15050A">
@@ -42,7 +42,7 @@ A discovery feed, a risk engine, and an explanation layer, all reading the same 
 
 | The problem | What FLETCH does |
 |---|---|
-| Hundreds of new tokens a day, most of them noise | Ranks by **FLETCH Score** — an explainable blend of momentum, liquidity, holders, and safety — not by market cap |
+| Thousands of new tokens a day (5,000+ on busy days), most of them noise | Ranks by **FLETCH Score** — an explainable blend of momentum, liquidity, holders, and safety — not by market cap |
 | "Is this a bundle / bot / bot-farm launch?" | Reads the launch transaction itself: dev-buy %, wallets exempted from the opening snipe tax, serial-deployer count — see [docs/RISK.md](./docs/RISK.md) |
 | "Why is this moving right now?" | A templated explanation built directly from the structured numbers FLETCH computed — never a free-form model call touching raw data — see [docs/SIGNALS.md](./docs/SIGNALS.md) |
 | Dashboards that quietly fake the numbers they can't get | Smart Money and Social components render `UNAVAILABLE` with a stated reason instead of a plausible-looking guess — see [docs/DATA.md](./docs/DATA.md) |
@@ -104,7 +104,7 @@ Beyond the discovery feed, FLETCH runs a real signal engine (`src/signals/signal
 
 ## Continuous Monitoring
 
-FLETCH doesn't wait for someone to open a token page. A durable, prioritized monitoring queue (a SQLite table, survives restart) discovers new launches on a bounded scan, then checks whatever's due with bounded concurrency — new launches and tokens with recent signals get checked often, quiet ones less so. A check that fails never writes fake data: only the queue's own failure count and last error change, and a token failing repeatedly is marked FAILED and stops being scheduled, so one broken address can't retry forever. History is pruned on a retention schedule so storage stays bounded. Every real check still goes through the same signal engine and `analyzeAndPersist()` the API already uses — this is scheduling and bounding, not a second signal system. `GET /api/monitoring` shows whether it's actually running. Full breakdown, including the priority model and what's honestly not built yet: [docs/MONITORING.md](./docs/MONITORING.md).
+FLETCH doesn't wait for someone to open a token page. A durable, prioritized monitoring queue (a SQLite table, survives restart) discovers new launches on a bounded scan, then checks whatever's due with bounded concurrency. Most launches never trade, so a cheap **activity sweep** (one batched `eth_getLogs` for up to 100 curves at a time, every minute) decides where the expensive full checks go: a token with a new curve trade jumps to the front, a launch still silent 15 minutes after discovery drops to the back before it ever costs a full check, and among busy tokens the most recently traded is checked first. On the free public RPC, both `429` and `403` are treated as rate limits — everything pauses and backs off instead of hammering the endpoint, and no token is penalized for it. A check that fails never writes fake data: only the queue's own failure count and last error change, and a token failing repeatedly is marked FAILED and stops being scheduled, so one broken address can't retry forever. History is pruned on a retention schedule so storage stays bounded. Every real check still goes through the same signal engine and `analyzeAndPersist()` the API already uses — this is scheduling and bounding, not a second signal system. `GET /api/monitoring` shows whether it's actually running. Full breakdown, including the priority model and what's honestly not built yet: [docs/MONITORING.md](./docs/MONITORING.md).
 
 ## Meme Radar
 
@@ -183,9 +183,10 @@ The two server-side features degrade to "field omitted" / "chat not configured" 
 
 **[app.getfletch.xyz](https://app.getfletch.xyz)** — the full app, running 24/7 against Robinhood Chain mainnet. No sign-up, no wallet connection.
 
-- **Overview / Radar / Signals / Tokens** — hundreds of fresh Pons V2 launches monitored continuously; drained, inactive launches are marked dead and drop off the radar.
-- **Token pages** — FLETCH Score, risk with evidence, lifetime holders, signal lifecycle, every tx and address linked to the [Robinhood Chain explorer](https://robinhoodchain.blockscout.com).
-- **Wallets** — realized/unrealized PnL, win rate, entry timing, holding period and linked wallets from recorded curve trades.
+- **Overview / Radar / Signals / Tokens** — live numbers up top, a newest-first signal feed, and the tokens actually being traded checked first; drained, inactive launches are marked dead and drop off the radar.
+- **Search** — by `$ticker`, name or address from the header (press `/`), answered from stored data without a chain call; an unknown address opens as a wallet.
+- **Token pages** — FLETCH Score, risk with evidence, holder / liquidity / score charts over time, the token's top traders, signal lifecycle, every tx and address linked to the [Robinhood Chain explorer](https://robinhoodchain.blockscout.com).
+- **Wallets** — who's trading on the curves right now (most active, biggest buyers, biggest sellers over 1h / 24h / 7d), and per wallet: realized/unrealized PnL, win rate, entry timing, holding period and linked wallets from recorded curve trades.
 - **Ask FLETCH AI** — bring your own Anthropic key; it stays in your browser tab and never reaches the server.
 
 ## Hardened on mainnet
@@ -201,6 +202,11 @@ Running FLETCH against real Robinhood Chain mainnet data surfaced problems no fi
 | With < 10 holders, "top 10 own 100%" is arithmetic, not risk | Reported honestly as "only N holders so far" |
 | Dead launches re-emitted "liquidity is only $0" and topped the radar | Drained + inactive → `DEAD`: off the radar and feed, re-checked every 6h in case it revives |
 | Pages re-read the chain on every view and hit the public RPC's rate limit | Reports are stored by monitoring and served instantly; a failed live read falls back to the last report, marked stale |
+| The public RPC answers **403**, not 429, when it's had enough — nothing paused, and ~6 checks an hour got through | 403 is a rate limit too: everything backs off, tokens aren't penalized |
+| ~5,000 launches a day, most never trade — every one got a full check on discovery, and 474 of 500 queued tokens were never checked | A batched activity sweep finds which curves are trading; silent launches drop back, the most recently traded go first — **3 → 23 successful checks an hour** on the same free RPC |
+| Each check fetched the same Buy/Sell logs twice | The buy/sell window is counted from the trades just recorded |
+| The live feed sorted by severity before time, so day-old CRITICAL rows sat above fresh whale buys ("last signal 21h ago") | Newest first; severity only breaks ties |
+| With frequent checks, the same whale transaction was re-filed on every check (3,265 "signals" in an hour) | One signal per transaction; unchanged risk findings refiled only when they change or once a day |
 
 ## Architecture
 
@@ -230,7 +236,7 @@ ENABLE_POLLER=true npm run dev
 
 FLETCH reads Robinhood Chain directly — no seed data, no fixtures shipped in the repo. What's real today versus what's `unavailable` and why: [docs/DATA.md](./docs/DATA.md). Short version:
 
-**Real:** new-token discovery with a permanent launch registry, launch risk signals, lifetime holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Whale Activity/Safety), risk levels with evidence, signal lifecycle, per-wallet curve trades with realized/unrealized PnL, win rate, entry timing, holding period and linked wallets, dead-launch detection.
+**Real:** new-token discovery with a permanent launch registry, a live wallet leaderboard from recorded curve trades, launch risk signals, lifetime holder counts + whale moves, pre-graduation liquidity/price, buy/sell activity, FLETCH Score (Momentum/Liquidity/Holder Growth/Whale Activity/Safety), risk levels with evidence, signal lifecycle, per-wallet curve trades with realized/unrealized PnL, win rate, entry timing, holding period and linked wallets, dead-launch detection.
 
 **Explicitly unavailable, not faked:** post-graduation (Uniswap v4) pricing, PnL for tokens paired with something other than native ETH (units aren't mixed), Social signal. See [docs/DATA.md](./docs/DATA.md).
 
@@ -241,7 +247,7 @@ Every `DEMO`-labeled block above is illustrative shape, not real output — this
 ## Tests
 
 <p align="center">
-  <img src="./assets/tests-terminal.gif" alt="FLETCH test suite — 218 passing, 82.18% line coverage, clean build" width="100%">
+  <img src="./assets/tests-terminal.gif" alt="FLETCH test suite running (recorded at an earlier version — current numbers are just below)" width="100%">
 </p>
 
 FLETCH's test suite covers the parts of the product where correctness actually matters: every FLETCH Score formula, every risk-finding threshold, every signal type the signal engine can emit, the persistence layer that backs all of it, and the API surface end-to-end over real HTTP. All of it runs deterministically — no live RPC calls, no real database file, no wall-clock timing — using Node's built-in test runner and `node:sqlite`'s in-memory mode, so a run is exact and reproducible every time.
@@ -251,8 +257,8 @@ npm test
 ```
 
 ```
-tests 386
-pass 386
+tests 429
+pass 429
 fail 0
 ```
 
@@ -261,10 +267,10 @@ npm run test:coverage
 ```
 
 ```
-all files   |  87.54 |    87.26 |   74.27 |
+all files   |  89.06 |    86.78 |   77.01 |
 ```
 
-88.5% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
+89.1% line coverage on real application code (test files themselves excluded from that number). Core business logic — signal detection, risk analysis, scoring, persistence, wallet intelligence, the "why is it moving" explainer, the AI rephrase layer, and the chat agent's tool-use loop — sits at 90–100%. The lower spots are `chain/*.ts`, `data/providers/rpcProvider.ts`, and `intel/tokenIntel.ts`, which genuinely need a live RPC connection to exercise meaningfully, plus `ai/client.ts`, which needs a real `ANTHROPIC_API_KEY`; per this project's own rule against fabricating chain data (and, now, fabricated AI responses), none of those are mocked into a false 100%. See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#tests) for the full breakdown and the reasoning file by file.
 
 ```sh
 npm run test:integration   # the five test files that exercise multiple layers together —
@@ -287,7 +293,7 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 ## Roadmap
 
 <details>
-<summary>Priority order, 12 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
+<summary>Priority order, 15 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
 1. ~~Cut per-token RPC round-trips at scale~~ — **done without an indexer**: public RPC with 50k-block log ranges, a permanent launch registry and incremental holder/trade tracking. The Blockscout provider remains as an optional accelerator (its PRO API still rejects chain 4663)
 2. ~~Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot~~ — **done**
@@ -301,6 +307,9 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 10. ~~Host it~~ — **done**: live at [app.getfletch.xyz](https://app.getfletch.xyz) (Railway, persistent volume, public RPC)
 11. ~~Remember every launch; incremental holders and trades~~ — **done**: see [Hardened on mainnet](#hardened-on-mainnet)
 12. ~~Dead-launch detection~~ — **done**: drained + inactive launches leave the radar and feed, re-checked every 6h
+13. ~~Follow what's actually trading~~ — **done**: activity sweep + recent-trade-first checks, 403/429 back-off, one signal per whale transaction
+14. ~~Wallet leaderboard and search~~ — **done**: `GET /api/wallets` (optionally per token), `GET /api/search`
+15. ~~Backups~~ — **done**: daily snapshots, a token-protected download, Railway volume backups
 
 </details>
 
@@ -334,6 +343,8 @@ Free FLETCH PFPs and stickers — use them anywhere: your avatar, replies on X, 
 ## Deploy
 
 One process (API + dashboard + monitoring) with a SQLite file on a persistent volume. Ready for Railway out of the box — `Dockerfile` + `railway.json`; step-by-step in [docs/DEPLOY.md](./docs/DEPLOY.md).
+
+**Backups:** a consistent snapshot of the database (`VACUUM INTO`) is written daily next to it, newest 3 kept; set `BACKUP_TOKEN` to pull a copy off the server with `GET /api/admin/backup`, and turn on Railway's own Daily/Weekly volume backups — the three layers and how to restore are in [docs/DEPLOY.md](./docs/DEPLOY.md#operating-notes).
 
 ## Built on
 

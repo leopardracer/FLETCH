@@ -88,7 +88,7 @@ Every test is deterministic — no live RPC calls, no real database file (persis
 
 | Command | What it runs |
 |---|---|
-| `npm test` | The full suite — 238 tests across 24 files |
+| `npm test` | The full suite — 429 tests across 43 files |
 | `npm run test:integration` | The five files that exercise multiple layers together (see below) |
 | `npm run test:coverage` | Full suite with Node's built-in coverage report (`--experimental-test-coverage`, zero new dependencies) |
 | `npm run test:watch` | Builds once, then re-runs on every change to the compiled output — pair with `tsc -p tsconfig.json --watch` in another terminal for full auto-rebuild |

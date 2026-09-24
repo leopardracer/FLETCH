@@ -606,7 +606,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
     </div>
     <div>
       <div class="facts" data-stagger>
-        <div><b>420</b><span>tests, all passing</span></div>
+        <div><b>429</b><span>tests, all passing</span></div>
         <div><b>MIT</b><span>license</span></div>
         <div><b>0</b><span>ways to send a transaction</span></div>
       </div>
@@ -618,6 +618,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
           <li><code>GET /api/tokens/:address</code><span>A full token report</span></li>
           <li><code>GET /api/wallets</code><span>Who's trading on the curves</span></li>
           <li><code>GET /api/search?q=</code><span>Find a token by ticker or address</span></li>
+          <li><code>GET /api/wallets?token=</code><span>One token's top traders</span></li>
         </ul>
       </div>
     </div>
@@ -636,6 +637,9 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       <li><div><b>Fast reads at scale</b><span>A permanent launch registry and incremental holder and trade tracking, so history is never re-read.</span><em>Done</em></div></li>
       <li><div><b>Hardened on mainnet</b><span>Every bug real data found is fixed with a regression test built from that data.</span><em>Done</em></div></li>
       <li><div><b>Live at app.getfletch.xyz</b><span>The full app running around the clock, with its history on a persistent volume.</span><em>Done</em></div></li>
+      <li><div><b>Follows what's trading</b><span>A cheap sweep of every watched curve finds where trading is happening, and checks go there first — 8× more checks on the same free RPC.</span><em>Done</em></div></li>
+      <li><div><b>Search and wallet leaderboard</b><span>Find any token by ticker or address; see who's trading on the curves right now.</span><em>Done</em></div></li>
+      <li><div><b>Backed up</b><span>Daily snapshots of everything FLETCH has learned, plus a copy that can be pulled off the server.</span><em>Done</em></div></li>
       <li class="planned"><div><b>After graduation</b><span>Pricing and trade history once a token leaves the curve for its pool.</span><em>Planned</em></div></li>
     </ol>
   </div>
@@ -682,6 +686,7 @@ footer .legal{flex-basis:100%;font-size:14px;max-width:62em}
       <details><summary>What is FLETCH?</summary><p>A discovery feed, a risk engine and an AI explanation layer for meme tokens on Robinhood Chain. It reads launches, trades, holders, liquidity and wallet behavior directly off the chain.</p></details>
       <details><summary>Where can I use it?</summary><p>At app.getfletch.xyz — free, no sign-up, no wallet connection. Ask FLETCH AI works with your own Anthropic key, which stays in your browser tab.</p></details>
       <details><summary>Where does the data come from?</summary><p>Direct reads against Robinhood Chain (chain ID 4663) and the Pons V2 launchpad contracts. Every launch FLETCH sees is remembered, and holders and trades are tracked block by block from launch.</p></details>
+      <details><summary>How fresh is the data?</summary><p>Every watched token's curve is swept for new trades every minute, and tokens that are actually being traded get a full check first. The live numbers and the tape on this page refresh every 30 seconds.</p></details>
       <details><summary>Does FLETCH predict prices?</summary><p>No. FLETCH AI explains and answers; it never predicts. It only sees facts FLETCH's engine already computed from the chain, and it says plainly when data isn't available.</p></details>
       <details><summary>What does the FLETCH Score measure?</summary><p>An explainable blend of momentum, liquidity, holder growth, whale activity and safety — weighted across only the parts that are actually available for that token.</p></details>
       <details><summary>How is Radar different from the score?</summary><p>Radar ranks by how much is changing right now — recent signals converging on one token — not by the score or the token's size.</p></details>
