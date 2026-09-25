@@ -438,3 +438,19 @@ test("GET /api/health reports the last snapshot without exposing paths", async (
   const b = await (await fetch(`${baseUrl}/api/health`)).json();
   assert.deepEqual(b.backup, { lastSnapshotAt: null, snapshots: 0 });
 });
+
+test("GET /api/deployers/:address → honest empty profile for an address with no registered launches", async () => {
+  const res = await fetch(`${baseUrl}/api/deployers/0x1111111111111111111111111111111111111111`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.deployer, "0x1111111111111111111111111111111111111111");
+  assert.equal(body.summary.launches, 0);
+  assert.equal(body.summary.deadRatePct, null);
+  assert.deepEqual(body.launches, []);
+  assert.equal(typeof body.coverage, "string");
+});
+
+test("GET /api/deployers/:address → 400 on a malformed address", async () => {
+  const res = await fetch(`${baseUrl}/api/deployers/0xnope`);
+  assert.equal(res.status, 400);
+});

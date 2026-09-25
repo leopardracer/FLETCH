@@ -562,7 +562,7 @@ async function renderRiskView() {
             .map(
               (t) => `<tr onclick="location.hash='#/token/${t.token}'">
                 <td><span class="sym">${t.symbol ? "$" + esc(t.symbol) : "unresolved"}</span><br/><span class="addr">${fmtAddr(t.token)}</span>${whyLine(t.topSignal)}</td>
-                <td class="addr">${fmtAddr(t.deployer)}</td>
+                <td class="addr">${t.deployer ? `<a class="dep-link" onclick="event.stopPropagation(); location.hash='#/deployer/${esc(t.deployer)}'">${fmtAddr(t.deployer)}</a>` : fmtAddr(t.deployer)}</td>
                 <td>${severityChip(t.riskLevel)}</td>
                 <td>${scoreBadge(t.fletchScore)}</td>
               </tr>`
@@ -764,6 +764,7 @@ async function renderToken(address) {
         <div>
           <h1>${d.token.symbol ? "$" + esc(d.token.symbol) : "Unresolved token"}${d.status === "DEAD" ? ` <span class="dead-chip" title="Drained curve, no trades for hours — off the radar, re-checked every few hours">dead</span>` : ""}</h1>
           <div class="addr"><a class="hash" href="${EXPLORER}/token/${esc(d.token.address)}" target="_blank" rel="noopener">${esc(d.token.address)} ↗</a>${d.source === "cache" ? ` <span class="asof">${d.stale ? "stale · " : ""}updated ${fmtAge(d.asOf)} ago</span>` : ""}</div>
+          ${d.deployer ? `<div class="addr deployer-line">deployed by <a class="gh-link" onclick="location.hash='#/deployer/${esc(d.deployer.address)}'">${fmtAddr(d.deployer.address)}</a> · ${d.deployer.launches} launch${d.deployer.launches === 1 ? "" : "es"} on file →</div>` : ""}
         </div>
         <div class="score-big">
           <div class="num">${s.overall !== null ? s.overall : "—"}</div>
@@ -1103,7 +1104,14 @@ async function renderWalletDetail(address) {
   try {
     // ?summary=ai costs no chain reads — wallet data is all persisted — so
     // the AI read loads with the page instead of after it.
-    const w = await getJSON(`/api/wallets/${address}?summary=ai`);
+    const [w, dep] = await Promise.all([
+      getJSON(`/api/wallets/${address}?summary=ai`),
+      getJSON(`/api/deployers/${address}?limit=1`).catch(() => null),
+    ]);
+    const deployerBanner =
+      dep && dep.summary.launches > 0
+        ? `<div class="addr deployer-line">this address launched ${dep.summary.launches} token${dep.summary.launches === 1 ? "" : "s"} · <a class="gh-link" onclick="location.hash='#/deployer/${esc(dep.deployer)}'">deployer profile →</a></div>`
+        : "";
     const metricRows = Object.entries(w.metrics)
       .map(
         ([k, v]) => `<div class="avail-row" title="${esc(v.reason || "")}"><span>${WALLET_METRIC_LABEL[k] || k.replace(/([A-Z])/g, " $1").trim()}</span><span>${walletMetricValue(v)}</span></div>`
@@ -1116,6 +1124,7 @@ async function renderWalletDetail(address) {
         <div>
           <h1>Wallet</h1>
           <div class="addr">${esc(w.wallet)}</div>
+          ${deployerBanner}
         </div>
       </div>
       ${aiCard("FLETCH AI wallet read", w.naturalLanguageSummary, { facts: w.aiFacts })}
@@ -1181,12 +1190,83 @@ async function renderWalletDetail(address) {
   }
 }
 
+const OUTCOME_CHIP = {
+  GRADUATED: `<span class="chip LOW" title="Filled its bonding curve and graduated">graduated</span>`,
+  DEAD: `<span class="chip HIGH" title="Drained curve, no trades for hours">dead</span>`,
+  LIVE: `<span class="chip MEDIUM" title="Still trading on its curve">live</span>`,
+  UNCHECKED: `<span class="chip na" title="Registered, not checked by FLETCH yet">unchecked</span>`,
+};
+
+/** "Who launched this?" — every launch FLETCH has registered from one address, and how each ended up. */
+async function renderDeployer(address) {
+  renderNav(null);
+  app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${loadingLine(fmtAddr(address))}`;
+  try {
+    const d = await getJSON(`/api/deployers/${address}`);
+    const s = d.summary;
+    const rate = (v) => (v === null ? `<div class="v unavailable">—</div>` : `<div class="v">${v}%</div>`);
+    const verdict =
+      s.launches === 0
+        ? ""
+        : s.deadRatePct !== null && s.launches >= 3 && s.deadRatePct >= 50
+          ? `<p class="deployer-verdict bad">${s.dead} of ${s.graduated + s.dead + s.live} checked launches from this address are dead.</p>`
+          : s.launches > 1
+            ? `<p class="deployer-verdict">${s.launches} launches on file from this address.</p>`
+            : `<p class="deployer-verdict">One launch on file from this address.</p>`;
+    app.innerHTML = `
+      <a class="back" onclick="history.back()">&larr; back</a>
+      <div class="detail-head">
+        <div>
+          <h1>Deployer</h1>
+          <div class="addr"><a class="hash" href="${EXPLORER}/address/${esc(d.deployer)}" target="_blank" rel="noopener">${esc(d.deployer)} ↗</a></div>
+          <div class="addr" style="margin-top:6px"><a class="gh-link" onclick="location.hash='#/wallet/${esc(d.deployer)}'">trading activity of this address →</a></div>
+        </div>
+      </div>
+      ${verdict}
+      ${
+        s.launches === 0
+          ? stateBlock("empty", "NO LAUNCHES ON FILE", "FLETCH hasn't registered a Pons V2 launch from this address.")
+          : `<div class="grid">
+              <div class="card"><div class="k">Launches</div><div class="v">${s.launches}</div><div class="sub">${s.unchecked ? `${s.unchecked} not checked yet` : "all checked"}</div></div>
+              <div class="card"><div class="k">Dead</div>${rate(s.deadRatePct)}<div class="sub">${s.dead} of checked</div></div>
+              <div class="card"><div class="k">Graduated</div>${rate(s.graduatedRatePct)}<div class="sub">${s.graduated} of checked</div></div>
+              <div class="card"><div class="k">Avg FLETCH Score</div>${s.avgScore === null ? `<div class="v unavailable">—</div>` : `<div class="v">${s.avgScore}</div>`}<div class="sub">latest score per token</div></div>
+            </div>
+            <div class="panel-block">
+              <h2>Launches</h2>
+              <p style="color:var(--ink-faint);font-size:12.5px;margin-top:0">${esc(d.coverage)}</p>
+              <div class="table-wrap"><table class="feed">
+                <thead><tr><th>Token</th><th>Launch block</th><th>Outcome</th><th>Risk</th><th>FLETCH Score</th></tr></thead>
+                <tbody>${d.launches
+                  .map(
+                    (l) => `<tr onclick="location.hash='#/token/${esc(l.token)}'">
+                      <td><span class="sym">${l.symbol ? "$" + esc(l.symbol) : "unresolved"}</span><br/><span class="addr">${fmtAddr(l.token)}</span></td>
+                      <td class="addr">#${Number(l.launchBlock).toLocaleString()}</td>
+                      <td>${OUTCOME_CHIP[l.outcome] || esc(l.outcome)}</td>
+                      <td>${l.riskLevel ? severityChip(l.riskLevel) : `<span class="chip na">—</span>`}</td>
+                      <td>${scoreBadge(l.score)}</td>
+                    </tr>`
+                  )
+                  .join("")}</tbody>
+              </table></div>
+              ${d.truncated ? `<p style="color:var(--ink-faint);font-size:12.5px">Showing the newest ${d.launches.length} of ${s.launches}.</p>` : ""}
+            </div>`
+      }
+    `;
+  } catch (e) {
+    app.innerHTML = `<a class="back" onclick="history.back()">&larr; back</a>${stateBlock("error", "COULDN'T LOAD THIS DEPLOYER", esc(e.message))}`;
+  }
+}
+
 function route() {
   const hash = location.hash || "#/";
   renderAskFab(hash);
   const tokenMatch = hash.match(/^#\/token\/(0x[a-fA-F0-9]{40})$/);
   const walletMatch = hash.match(/^#\/wallet\/(0x[a-fA-F0-9]{40})$/);
-  if (tokenMatch) {
+  const deployerMatch = hash.match(/^#\/deployer\/(0x[a-fA-F0-9]{40})$/);
+  if (deployerMatch) {
+    renderDeployer(deployerMatch[1]);
+  } else if (tokenMatch) {
     renderToken(tokenMatch[1]);
   } else if (walletMatch) {
     renderWalletDetail(walletMatch[1]);

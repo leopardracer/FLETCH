@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/leopardracer/FLETCH/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="tests" src="https://img.shields.io/badge/tests-429%20passing-D9316A?style=flat-square&labelColor=15050A">
+  <img alt="tests" src="https://img.shields.io/badge/tests-438%20passing-D9316A?style=flat-square&labelColor=15050A">
   <img alt="coverage" src="https://img.shields.io/badge/coverage-89.1%25-D9316A?style=flat-square&labelColor=15050A">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A522.6-F5E8EC?style=flat-square&labelColor=15050A">
   <img alt="chain" src="https://img.shields.io/badge/chain-4663-F5E8EC?style=flat-square&labelColor=15050A">
@@ -165,6 +165,8 @@ RISK
 
 `LOW` / `MEDIUM` / `HIGH` / `CRITICAL`, never a bare "SCAM." Launch-moment checks (dev buy, bundled wallets, serial deployer) plus ongoing checks (holder concentration, liquidity depth, trend-based findings). Full threshold table and what isn't checked yet (mint permissions, blacklist functions — needs bytecode analysis, not built): [docs/RISK.md](./docs/RISK.md).
 
+**Deployer profiles.** Every token page names who launched it. One click opens that address's track record: every launch FLETCH has registered from it, and which ones graduated, died or are still live, with dead and graduated rates over checked launches only (`GET /api/deployers/:address`). It covers what FLETCH has on file, and says so — older launches it never scanned aren't counted.
+
 ## Smart Money
 
 Per wallet, real: every curve buy/sell recorded with its exact price-at-trade, and from that realized PnL, unrealized PnL, win rate, early-entry timing, average holding period and linked (coordinated-entry) wallets — each computed only over history FLETCH saw gap-free from launch, and `UNAVAILABLE` with a reason otherwise (`GET /api/wallets/:address`). Not yet: a cross-wallet "smart money" ranking in the FLETCH Score (`src/wallets/smartMoney.ts` stays unavailable until enough real closed positions accumulate to rank). See [docs/DATA.md](./docs/DATA.md#smart-money).
@@ -293,7 +295,7 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 ## Roadmap
 
 <details>
-<summary>Priority order, 15 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
+<summary>Priority order, 16 items — click to expand (detailed in <a href="./docs/DEVELOPMENT.md#next-steps">docs/DEVELOPMENT.md</a>)</summary>
 
 1. ~~Cut per-token RPC round-trips at scale~~ — **done without an indexer**: public RPC with 50k-block log ranges, a permanent launch registry and incremental holder/trade tracking. The Blockscout provider remains as an optional accelerator (its PRO API still rejects chain 4663)
 2. ~~Thread each token's launch timestamp into the signal engine so activity acceleration compares against a true baseline, not just the last snapshot~~ — **done**
@@ -309,6 +311,7 @@ Type-checks, builds, and starts the API + dashboard. `npm run build` does the fi
 12. ~~Dead-launch detection~~ — **done**: drained + inactive launches leave the radar and feed, re-checked every 6h
 13. ~~Follow what's actually trading~~ — **done**: activity sweep + recent-trade-first checks, 403/429 back-off, one signal per whale transaction
 14. ~~Wallet leaderboard and search~~ — **done**: `GET /api/wallets` (optionally per token), `GET /api/search`
+16. ~~Deployer profiles~~ — **done**: every launch from one address and its outcome, linked from every token page, `GET /api/deployers/:address`
 15. ~~Backups~~ — **done**: daily snapshots, a token-protected download, Railway volume backups
 
 </details>

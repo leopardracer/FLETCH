@@ -26,6 +26,7 @@ import { countSignalsSince } from "../persistence/signalsStore.js";
 import { bigIntSafe, errorMessage } from "./jsonSafe.js";
 import { rpcBackoff, isRpcRateLimitError, type RpcBackoffState } from "../core/rpcBackoff.js";
 import { getReport, listReports } from "../persistence/reportStore.js";
+import { getDeployerProfile, getTokenDeployer } from "../persistence/deployerStore.js";
 import type { Signal } from "../signals/types.js";
 import { rephraseSummary, rephraseFacts } from "../ai/rephrase.js";
 import { buildMarketBrief, type MarketBrief } from "../ai/brief.js";
@@ -424,6 +425,9 @@ export function createServer(options?: {
     if (req.query.summary === "ai") {
       body.naturalLanguageSummary = await rephraseSummary(why);
     }
+    // Who launched it (from FLETCH's launch registry, no chain read) — the
+    // dashboard links this to the deployer's profile.
+    body.deployer = getTokenDeployer(address);
 
     res.json(body);
   }));
@@ -497,6 +501,14 @@ export function createServer(options?: {
     }
     res.json(intel);
   }));
+
+  // Deployer profile: every launch FLETCH has registered from this address
+  // and what became of each (graduated / dead / live / unchecked). No chain
+  // read — see persistence/deployerStore.ts for what is and isn't covered.
+  app.get("/api/deployers/:address", (req, res) => {
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 100));
+    res.json(getDeployerProfile(req.params.address, limit));
+  });
 
   // Is the server-side AI (chat, brief, summaries) configured? Lets the
   // dashboard use server chat when it is, and offer BYOK when it isn't.

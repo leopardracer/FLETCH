@@ -156,6 +156,8 @@ function createSchema(db: DatabaseSync): void {
       launch_json TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_monitored_status_next_check ON monitored_tokens(status, next_check_at);
+    -- Deployer profiles (persistence/deployerStore.ts): every launch by one address.
+    CREATE INDEX IF NOT EXISTS idx_launch_records_deployer ON launch_records(lower(json_extract(record_json, '$.deployer')));
   `);
 
   migrateInPlace(db);

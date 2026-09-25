@@ -43,6 +43,7 @@ Open `http://localhost:<PORT>` after `npm run dev`.
 | `GET /api/tokens/:address/signals` | signal timeline for that token |
 | `GET /api/tokens/:address/wallets` | wallet activity for that token (per-token scope) |
 | `GET /api/wallets/:address` | wallet intelligence — real participation record, per-token positions, real realized/unrealized PnL, win rate and early-entry timing from price-at-trade; average holding period, linked wallets |
+| `GET /api/deployers/:address` | deployer profile — every launch FLETCH registered from the address, each marked GRADUATED / DEAD / LIVE / UNCHECKED, with dead and graduated rates over checked launches (`?limit=`, default 100, max 500) |
 | `GET /api/brief` | FLETCH AI market brief — last hour across Robinhood Chain, from Radar + signals (cached 2 min) |
 | `GET /api/tokens/:address/ai-summary` | FLETCH AI analyst paragraph for a token whose report was just loaded (no second chain read) |
 | `GET /api/ai` | whether server-side AI is configured: `{ enabled, model }` |

@@ -1178,3 +1178,13 @@ table.feed .addr,.addr{color:#A98A97}
   .ask-fab { display: none; }
   .navlink-ai { order: -1; font-weight: 800; color: var(--on-page); }
 }
+
+/* ================= deployer profile ================= */
+.deployer-line { margin-top: 6px; }
+.deployer-line .gh-link { cursor: pointer; }
+.dep-link { color: var(--pink-bright); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255,45,122,.4); }
+.dep-link:hover { text-decoration-color: currentColor; }
+.deployer-verdict { font-family: var(--display); font-variation-settings: "wdth" 112; font-weight: 800; font-size: 19px; color: var(--on-page); margin: 4px 0 18px; }
+.deployer-verdict.bad { display: inline-block; background: var(--on-page); color: var(--pink); padding: 8px 14px; border-radius: 12px; box-shadow: 0 6px 0 rgba(22,4,12,.25); }
+.grid:has(> .card:nth-child(4)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .grid:has(> .card:nth-child(4)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
