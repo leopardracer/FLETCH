@@ -454,3 +454,43 @@ test("GET /api/deployers/:address → 400 on a malformed address", async () => {
   const res = await fetch(`${baseUrl}/api/deployers/0xnope`);
   assert.equal(res.status, 400);
 });
+
+test("GET /api/tokens/:address?live=1 on a report younger than a minute is served from cache — a refresh button can't hammer the RPC", async () => {
+  const T = "0x00000000000000000000000000000000000000c3";
+  saveReport(T, { token: { address: T, symbol: "JUSTNOW" }, whyIsItMoving: { bullets: [], risks: [], insufficientData: true } });
+  const res = await fetch(`${baseUrl}/api/tokens/${T}?live=1`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.source, "cache");
+  assert.equal(body.stale, undefined);
+  assert.equal(body.token.symbol, "JUSTNOW");
+});
+
+test("GET /api/tokens/:address serves the older report (marked stale) without a chain read while the RPC breaker is open", async () => {
+  const { rpcBackoff } = await import("../core/rpcBackoff.js");
+  const T = "0x00000000000000000000000000000000000000c4";
+  saveReport(T, { token: { address: T, symbol: "PAUSED" }, whyIsItMoving: { bullets: [], risks: [], insufficientData: true } }, Math.floor(Date.now() / 1000) - 3600);
+  rpcBackoff.recordRateLimit(Math.floor(Date.now() / 1000), new Error("429 Too Many Requests"));
+  try {
+    const res = await fetch(`${baseUrl}/api/tokens/${T}`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.source, "cache");
+    assert.equal(body.stale, true);
+    assert.equal(body.token.symbol, "PAUSED");
+  } finally {
+    rpcBackoff.recordSuccess();
+  }
+});
+
+test("concurrent GET /api/tokens/:address for the same uncached token all get the same answer (one shared live read)", async () => {
+  const T = "0x00000000000000000000000000000000000000c5";
+  const statuses = await Promise.all(Array.from({ length: 10 }, async () => (await fetch(`${baseUrl}/api/tokens/${T}`)).status));
+  assert.equal(new Set(statuses).size, 1);
+});
+
+test("GET /api/health twice in a row: the second answer reuses the shared chain ping", async () => {
+  const a = await (await fetch(`${baseUrl}/api/health`)).json();
+  const b = await (await fetch(`${baseUrl}/api/health`)).json();
+  assert.deepEqual(a.chain, b.chain);
+});

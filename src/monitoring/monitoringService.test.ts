@@ -294,3 +294,26 @@ function fakeScore(overrides: Partial<FletchScore> = {}): FletchScore {
     ...overrides,
   };
 }
+
+test("intervalForPriority: a LOW token on its curve waits LOW_RECHECK_SECONDS (the activity sweep re-promotes it on a trade); graduated LOW keeps the short interval", async () => {
+  const { intervalForPriority } = await import("./monitoringService.js");
+  const { config } = await import("../core/config.js");
+  const base = config.pollIntervalMs / 1000;
+  assert.equal(intervalForPriority("HIGH", "CURVE"), base);
+  assert.equal(intervalForPriority("NORMAL", "CURVE"), base * 3);
+  assert.equal(intervalForPriority("LOW", "CURVE"), Math.max(base * 8, config.lowRecheckSeconds));
+  assert.equal(intervalForPriority("LOW", null), Math.max(base * 8, config.lowRecheckSeconds));
+  assert.equal(intervalForPriority("LOW", "GRADUATED"), base * 8);
+  assert.ok(intervalForPriority("LOW", "CURVE") >= 6 * 3600, "default keeps silent curves out of the hot path");
+});
+
+test("a successful check of a never-traded token past its quiet window schedules the next one LOW_RECHECK_SECONDS out, not 40 minutes", async () => {
+  const { config } = await import("../core/config.js");
+  const T = addr(4242);
+  upsertDiscovered(T, NOW - 3600, "LOW", fakeLaunch(T), NOW - 10);
+  const r = await runMonitoringCycle(fakeDeps({ getMetrics: async () => fakeMetrics({ graduated: false }) }), NOW, 1, 4);
+  assert.equal(r.succeeded, 1);
+  const row = getMonitoredToken(T)!;
+  assert.equal(row.priority, "LOW");
+  assert.equal(row.nextCheckAt, NOW + Math.max((config.pollIntervalMs / 1000) * 8, config.lowRecheckSeconds));
+});

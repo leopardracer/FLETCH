@@ -41,6 +41,16 @@ const envSchema = z.object({
   // --- Continuous monitoring (docs/MONITORING.md) ---
   ACTIVITY_SWEEP_INTERVAL_MS: z.coerce.number().default(60_000), // how often to check every watched curve for new trades in one batched read (monitoring/activitySweep.ts)
   DISCOVERY_INTERVAL_MS: z.coerce.number().default(300_000), // how often to scan for new launches and add them to the monitoring queue
+  // How often the monitoring loop wakes up to drain whatever is due. Separate from
+  // POLL_INTERVAL_MS (how often a token is RE-checked): found live, one batch of
+  // MAX_CONCURRENT_TOKENS*4 checks every 5 minutes capped the whole queue at ~48
+  // checks an hour while 497 of 500 tokens sat overdue. A tick that finds nothing
+  // due costs one SQLite query and no RPC; the RPC backoff still pauses everything.
+  MONITORING_TICK_MS: z.coerce.number().default(20_000),
+  // LOW-priority tokens still on their curve are re-checked this rarely: the
+  // activity sweep watches every curve each minute and promotes a token to HIGH
+  // the moment it trades, so frequent full checks of a silent curve only burn RPC.
+  LOW_RECHECK_SECONDS: z.coerce.number().default(6 * 3600),
   MAX_CONCURRENT_TOKENS: z.coerce.number().default(5), // in-flight chain reads per monitoring cycle — bounds RPC load regardless of queue size
   MAX_MONITORED_TOKENS: z.coerce.number().default(500), // hard cap on the monitoring queue — bounded storage/RPC even if launches vastly outpace check capacity
   MAX_CONSECUTIVE_FAILURES: z.coerce.number().default(5), // a token failing this many checks in a row is marked FAILED and stops being scheduled, so one permanently-broken address can't retry forever
@@ -128,6 +138,8 @@ export const config = {
   snapshotMinIntervalSeconds: env.SNAPSHOT_MIN_INTERVAL_SECONDS,
   discoveryIntervalMs: env.DISCOVERY_INTERVAL_MS,
   activitySweepIntervalMs: env.ACTIVITY_SWEEP_INTERVAL_MS,
+  monitoringTickMs: env.MONITORING_TICK_MS,
+  lowRecheckSeconds: env.LOW_RECHECK_SECONDS,
   maxConcurrentTokens: env.MAX_CONCURRENT_TOKENS,
   maxMonitoredTokens: env.MAX_MONITORED_TOKENS,
   maxConsecutiveFailures: env.MAX_CONSECUTIVE_FAILURES,

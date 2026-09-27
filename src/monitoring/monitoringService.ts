@@ -179,7 +179,7 @@ export async function runMonitoringCycle(
         const phase: Phase | null =
           metrics.graduated === true ? "GRADUATED" : metrics.graduated === false ? "CURVE" : item.phase === "DEAD" ? "CURVE" : null;
         const priority = computeNextPriority(item, now);
-        recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority), priority);
+        recordCheckSuccess(item.token as `0x${string}`, phase, now, now + intervalForPriority(priority, phase ?? item.phase), priority);
       }
       backoff.recordSuccess();
       succeeded++;
@@ -236,11 +236,19 @@ export function computeNextPriority(item: MonitoredToken, now: number): Monitori
   return now - recentSignals[0].timestamp <= RADAR_LIKE_WINDOW_SECONDS ? "HIGH" : "NORMAL";
 }
 
-function intervalForPriority(priority: MonitoringPriority): number {
+/**
+ * Seconds until the next full check. LOW tokens still on their bonding curve
+ * wait LOW_RECHECK_SECONDS: the activity sweep sees every curve trade within a
+ * minute and pulls the token back to HIGH, so re-reading a silent curve every
+ * 40 minutes bought nothing but RPC load. Graduated tokens trade off-curve,
+ * where the sweep can't see them, so they keep the shorter LOW interval.
+ */
+export function intervalForPriority(priority: MonitoringPriority, phase: Phase | null = null): number {
   const baseSeconds = config.pollIntervalMs / 1000;
   if (priority === "HIGH") return baseSeconds;
   if (priority === "NORMAL") return baseSeconds * 3;
-  return baseSeconds * 8; // LOW
+  if (phase === "GRADUATED") return baseSeconds * 8;
+  return Math.max(baseSeconds * 8, config.lowRecheckSeconds); // LOW, sweep-covered
 }
 
 export interface RetentionResult {
