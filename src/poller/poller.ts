@@ -42,7 +42,7 @@ export function startPoller(): () => void {
   }
   console.log(
     `Monitoring enabled: discovery every ${config.discoveryIntervalMs / 1000}s, ` +
-      `checks every ${config.pollIntervalMs / 1000}s (max ${config.maxConcurrentTokens} concurrent, ` +
+      `due checks drained every ${config.monitoringTickMs / 1000}s (max ${config.maxConcurrentTokens} concurrent, ` +
       `${config.maxMonitoredTokens} token cap).`
   );
 
@@ -56,7 +56,9 @@ export function startPoller(): () => void {
   discoveryTick();
   monitoringTick();
   const discoveryHandle = setInterval(discoveryTick, config.discoveryIntervalMs);
-  const monitoringHandle = setInterval(monitoringTick, config.pollIntervalMs);
+  // Wakes often and drains what's due; POLL_INTERVAL_MS decides when each token
+  // is due again (monitoringService.ts intervalForPriority), not how often we look.
+  const monitoringHandle = setInterval(monitoringTick, config.monitoringTickMs);
   // Offset from the discovery+monitoring burst at start-up so the three
   // don't hit the RPC in the same second (found live: a fresh deploy tripped
   // the rate limit within two minutes).

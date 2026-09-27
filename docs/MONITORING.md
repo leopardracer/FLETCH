@@ -15,7 +15,7 @@ Launch Discovery   (bounded scan, every DISCOVERY_INTERVAL_MS)
       ↓
 Monitoring Queue    (monitored_tokens — survives restart)
       ↓
-Snapshot Collector  (every POLL_INTERVAL_MS, bounded concurrency)
+Snapshot Collector  (drains due checks every MONITORING_TICK_MS, bounded concurrency)
       ↓
 Previous Snapshot ──┐
       ↓             │ (existing comparison logic — see SIGNALS.md)
@@ -98,7 +98,9 @@ Found live on app.getfletch.xyz: ~3,300 tokens launched on Robinhood Chain in a 
 | Has ever produced a signal, but not recently | **NORMAL** |
 | Otherwise | **LOW** |
 
-Check interval scales with priority off the same `POLL_INTERVAL_MS` base: HIGH = 1×, NORMAL = 3×, LOW = 8×. A quiet token still gets checked — just less often, so it can't silently starve the concurrency budget that active tokens need.
+Check interval scales with priority off the same `POLL_INTERVAL_MS` base: HIGH = 1×, NORMAL = 3×, LOW = 8×. A LOW token still on its bonding curve waits `LOW_RECHECK_SECONDS` (6h) instead: the activity sweep sees every curve trade within a minute and promotes the token straight back to HIGH, so re-reading a silent curve every 40 minutes only burned RPC. Graduated tokens trade off-curve, where the sweep can't see them, so they keep the 8× interval.
+
+The loop itself wakes every `MONITORING_TICK_MS` (20s) and drains up to `MAX_CONCURRENT_TOKENS × 4` due checks. Found live: waking only once per `POLL_INTERVAL_MS` capped the whole queue at ~48 checks an hour with one worker, while 497 of 500 tokens sat overdue. A tick with nothing due costs one SQLite query and no RPC; the RPC backoff still pauses everything on a 403/429.
 
 ## Radar integration
 
@@ -136,6 +138,8 @@ All in `.env.example`, all with bounded, conservative defaults so a misconfigura
 |---|---|---|
 | `DISCOVERY_INTERVAL_MS` | 300000 (5 min) | how often the launch scan + retention prune run |
 | `ACTIVITY_SWEEP_INTERVAL_MS` | 60000 (1 min) | how often every watched curve is checked for new trades in one batched read |
+| `MONITORING_TICK_MS` | 20000 | how often the loop drains due checks |
+| `LOW_RECHECK_SECONDS` | 21600 | re-check interval for silent LOW tokens on their curve |
 | `MAX_CONCURRENT_TOKENS` | 5 | in-flight chain reads per monitoring cycle |
 | `MAX_MONITORED_TOKENS` | 500 | hard cap on the queue itself |
 | `MAX_CONSECUTIVE_FAILURES` | 5 | checks before a token is marked FAILED and stops being scheduled |

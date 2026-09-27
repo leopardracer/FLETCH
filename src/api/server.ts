@@ -37,6 +37,8 @@ import { searchTokens, isKnownToken, isFullAddress } from "../persistence/search
 import { getWalletLeaderboard, type LeaderboardSort } from "../persistence/walletLeaderboard.js";
 import { listBackups } from "../persistence/backup.js";
 import { timingSafeEqual } from "node:crypto";
+import { SingleFlight, TtlValue } from "../core/singleFlight.js";
+import type { ChainPingResult as PingResult } from "../chain/client.js";
 
 const provider = new RpcChainDataProvider();
 
@@ -119,6 +121,10 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 const FEED_CACHE_SECONDS = 90;
 /** A stored report this fresh is served as-is instead of re-reading the chain. */
 const REPORT_FRESH_SECONDS = 300;
+/** `?live=1` is ignored for a report younger than this — a refresh button can't turn into an RPC hammer. */
+const LIVE_REFRESH_MIN_AGE_SECONDS = 60;
+/** Every open dashboard polls /api/health every 20s; the chain ping behind it is shared for this long. */
+const HEALTH_PING_CACHE_MS = 10_000;
 /** The cached feed only lists tokens whose report is at most this old. */
 const FEED_REPORT_MAX_AGE_SECONDS = 3 * 3600;
 
@@ -173,6 +179,12 @@ export function createServer(options?: {
   let briefCache: { at: number; brief: MarketBrief } | null = null;
   const whyCache = new Map<string, { at: number; why: WhyIsItMoving }>();
   const feedCache = new Map<string, { at: number; body: unknown }>();
+  // Launch-day traffic guards: identical concurrent chain reads collapse into one.
+  const chainPing = new TtlValue<PingResult>(HEALTH_PING_CACHE_MS);
+  type LiveRead =
+    | { found: false }
+    | { found: true; body: Record<string, unknown>; why: WhyIsItMoving };
+  const liveReads = new SingleFlight<LiveRead>();
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const webDir = path.resolve(__dirname, "../../web");
@@ -196,7 +208,7 @@ export function createServer(options?: {
   });
 
   app.get("/api/health", asyncRoute(async (_req, res) => {
-    const chain = await pingChain();
+    const chain = await chainPing.get(pingChain);
     const last = listBackups()[0];
     res.json({
       ...buildHealthResponse(chain, config.hasBlockscout(), config.enablePoller, rpcBackoff.state(Math.floor(Date.now() / 1000))),
@@ -390,24 +402,38 @@ export function createServer(options?: {
     const address = req.params.address as `0x${string}`;
     const now = Math.floor(Date.now() / 1000);
     const stored = getReport(address);
-    const fresh = stored && now - stored.takenAt < REPORT_FRESH_SECONDS && req.query.live !== "1";
+    const age = stored ? now - stored.takenAt : Infinity;
+    const wantsLive = req.query.live === "1" && age >= LIVE_REFRESH_MIN_AGE_SECONDS;
+    const fresh = stored && age < REPORT_FRESH_SECONDS && !wantsLive;
+    // While the RPC circuit breaker is open, a live read would only fail (and
+    // feed the pause); an older report on file is the honest answer.
+    const servePausedStale = stored && !fresh && rpcBackoff.isPaused(now);
 
     let body: Record<string, unknown>;
     let why: WhyIsItMoving;
-    if (fresh) {
-      // Computed by monitoring (or a view) within the last few minutes — no chain reads.
-      body = { ...stored!.report, source: "cache", asOf: stored!.takenAt };
+    if (fresh || servePausedStale) {
+      // Computed by monitoring (or a view) recently — no chain reads.
+      body = { ...stored!.report, source: "cache", asOf: stored!.takenAt, ...(fresh ? {} : { stale: true }) };
       why = stored!.report.whyIsItMoving as WhyIsItMoving;
     } else {
       try {
-        const info = await readTokenInfo(address);
-        if (!info.contractExists) {
+        // Many visitors opening the same token at once share ONE set of chain reads.
+        const r = await liveReads.run(address.toLowerCase(), async (): Promise<LiveRead> => {
+          const info = await readTokenInfo(address);
+          if (!info.contractExists) return { found: false };
+          const intel = await getTokenIntel(address, info, provider);
+          return {
+            found: true,
+            body: { ...(bigIntSafe(intel) as unknown as Record<string, unknown>), source: "live", asOf: Math.floor(Date.now() / 1000) },
+            why: intel.whyIsItMoving,
+          };
+        });
+        if (!r.found) {
           res.status(404).json({ error: `No contract found at ${address} on Robinhood Chain (chain ID ${config.chainId}).` });
           return;
         }
-        const intel = await getTokenIntel(address, info, provider);
-        body = { ...(bigIntSafe(intel) as unknown as Record<string, unknown>), source: "live", asOf: now };
-        why = intel.whyIsItMoving;
+        body = { ...r.body };
+        why = r.why;
       } catch (e: unknown) {
         // Live read failed (rate limit, RPC outage, timeout) but an older report
         // is on file: serve it, clearly marked stale, instead of an error page.

@@ -78,7 +78,7 @@ export async function runActivitySweep(
   deps: SweepDeps = defaultSweepDeps,
   now: number = Math.floor(Date.now() / 1000),
   backoff: RpcBackoff = rpcBackoff,
-  lowIntervalSeconds: number = (config.pollIntervalMs / 1000) * 8
+  lowIntervalSeconds: number = Math.max((config.pollIntervalMs / 1000) * 8, config.lowRecheckSeconds)
 ): Promise<SweepResult> {
   const empty = { fromBlock: null, toBlock: null, curvesWatched: 0, tradesSeen: 0, promoted: 0 };
   if (backoff.isPaused(now)) return { ...empty, paused: true, rateLimitStarted: false, demoted: 0 };
