@@ -135,7 +135,7 @@ Six components, each either a real number or an explicit `null` with a reason. T
 | Momentum | 96 | buy pressure + activity level, since launch |
 | Smart Money | `UNAVAILABLE` | no cross-token wallet history store yet |
 | Holders | 91 | +42% since the last check (real, once history exists) |
-| Liquidity | 82 | curve balance, converted to USD |
+| Liquidity | 82 | curve reserve, converted to USD |
 | Whale Activity | 78 | 3 whale buys from the curve, no sells |
 | Safety | 71 | inverse of the risk report |
 

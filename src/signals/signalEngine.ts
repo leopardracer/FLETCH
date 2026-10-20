@@ -139,7 +139,7 @@ export function detectSignals(input: DetectSignalsInput): Signal[] {
 
     // A token that graduated between the two snapshots being compared has
     // an incompatible liquidity metric on each side (pre-graduation:
-    // the curve's own balance; post-graduation: not read at all yet, see
+    // the curve's quote reserve; post-graduation: not read at all yet, see
     // chain/liquidity.ts) — comparing them would risk calling a legitimate
     // phase transition a "liquidity collapse". The null-check above the
     // liquidity block already prevents this in the common case (post-grad

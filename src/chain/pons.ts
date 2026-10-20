@@ -103,4 +103,17 @@ export const curveAbi = [
   },
 ] as const;
 
+/** The quote asset the curve holds for trading. The curve's raw balance also
+ *  holds accrued protocol fees (quoteFeeBalance) and creator tax
+ *  (creatorTaxBalance), which are not tradeable liquidity. */
+export const curveReserveAbi = [
+  {
+    type: "function",
+    name: "realQuoteReserve",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 export const SOLD_ON_CURVE_SUPPLY = 714_285_714; // 5/7 of 1,000,000,000 — see Pons V2 docs

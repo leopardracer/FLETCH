@@ -2,7 +2,7 @@ import { formatUnits } from "viem";
 import { getClient } from "./client.js";
 import { getPairAssetUsdPrice } from "../core/price-feed.js";
 import { readLaunchRecord, readCurveState, type LaunchRecord } from "./launch.js";
-import { NATIVE_ETH, curveAbi } from "./pons.js";
+import { NATIVE_ETH, curveAbi, curveReserveAbi } from "./pons.js";
 import { config } from "../core/config.js";
 import { fetchLogsInChunks, boundedScanStart } from "./logScan.js";
 import { decodeCurveTrade } from "./curveTrades.js";
@@ -82,8 +82,14 @@ export async function readLiquidity(tokenAddress: `0x${string}`): Promise<Liquid
 
   let liquidityPairAsset: number | null = null;
   if (launch.pairToken.toLowerCase() === NATIVE_ETH) {
-    const balance = await getClient().getBalance({ address: launch.curve });
-    liquidityPairAsset = Number(formatUnits(balance, 18));
+    // The curve's ETH balance also holds unclaimed protocol fees and creator
+    // tax; only realQuoteReserve backs trades on the curve.
+    const reserve = await getClient().readContract({
+      address: launch.curve,
+      abi: curveReserveAbi,
+      functionName: "realQuoteReserve",
+    });
+    liquidityPairAsset = Number(formatUnits(reserve, 18));
   }
 
   const { price: priceInPair, scan: tradeScan } = await lastTradePrice(launch);
